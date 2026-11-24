@@ -27,7 +27,7 @@ var helpLeft = []helpSection{
 	{"Notas", [][2]string{
 		{"n  e  d", "nueva, editar, borrar"},
 		{"t  f", "filtrar por etiqueta o proyecto"},
-		{"/  enter", "buscar, leer completa"},
+		{"/  enter", "buscar, leer completa (j/k desplaza)"},
 	}},
 }
 

@@ -152,6 +152,18 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 		switch msg.String() {
 		case "esc", "enter", "q":
 			a.detail = nil
+		case "j", "down":
+			a.detail.scroll(1)
+		case "k", "up":
+			a.detail.scroll(-1)
+		case " ", "pgdown", "ctrl+d", "ctrl+f":
+			a.detail.scroll(a.detail.page)
+		case "b", "pgup", "ctrl+u", "ctrl+b":
+			a.detail.scroll(-a.detail.page)
+		case "g", "home":
+			a.detail.scroll(-a.detail.offset)
+		case "G", "end":
+			a.detail.scroll(a.detail.maxOffset)
 		}
 		return nil
 	}
@@ -493,27 +505,54 @@ func (c *Confirm) view() string {
 			renderHints("y confirmar · n cancelar"))
 }
 
+// Detail es una ventana de lectura. Si el contenido no cabe, se desplaza.
 type Detail struct {
 	title string
 	lines []string
+
+	offset    int // primera línea visible
+	page      int // líneas visibles (lo fija view)
+	maxOffset int // último offset válido (lo fija view)
+}
+
+func (d *Detail) scroll(delta int) {
+	d.offset = max(min(d.offset+delta, d.maxOffset), 0)
 }
 
 func (d *Detail) view(width, height int) string {
 	maxWidth := max(min(width-8, 90), 24)
-	body := titleStyle.Render(d.title) + "\n\n"
+	inner := maxWidth - 6 // borde y relleno horizontal
+
+	var content []string
 	for _, line := range d.lines {
-		body += wrapLine(line, maxWidth-4) + "\n"
-	}
-	body += "\n" + renderHints("esc cerrar")
-	if height > 6 && lipgloss.Height(body)+4 > height {
-		// notas largas: se recorta para no romper el layout
-		lines := strings.Split(body, "\n")
-		limit := max(height-6, 3)
-		if len(lines) > limit {
-			lines = append(lines[:limit-1], mutedStyle.Render("…"))
+		for _, wrapped := range strings.Split(wrapLine(line, inner), "\n") {
+			content = append(content, truncate(wrapped, inner))
 		}
-		body = strings.Join(lines, "\n")
 	}
+
+	// Fuera del texto: borde y relleno (4), título y separación (2), pie (2).
+	d.page = max(height-8, 3)
+	d.maxOffset = max(len(content)-d.page, 0)
+	d.offset = max(min(d.offset, d.maxOffset), 0)
+
+	end := min(d.offset+d.page, len(content))
+	visible := content[d.offset:end]
+
+	footer := renderHints("esc cerrar")
+	if d.maxOffset > 0 {
+		for len(visible) < d.page {
+			visible = append(visible, "")
+		}
+		position := fmt.Sprintf("líneas %d-%d de %d", d.offset+1, end, len(content))
+		switch {
+		case d.offset == 0:
+			position += "  ↓ hay más"
+		case d.offset == d.maxOffset:
+			position += "  fin"
+		}
+		footer = spread(renderHints("j/k mover · espacio página · g/G inicio/fin · esc cerrar"), mutedStyle.Render(position), inner)
+	}
+	body := titleStyle.Render(truncate(d.title, inner)) + "\n\n" + strings.Join(visible, "\n") + "\n\n" + footer
 	return modalStyle.Width(maxWidth).Render(body)
 }
 
