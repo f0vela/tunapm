@@ -9,24 +9,25 @@ type helpSection struct {
 
 var helpLeft = []helpSection{
 	{"Global", [][2]string{
-		{"1-4", "cambiar de vista"},
+		{"1-5", "cambiar de vista"},
 		{"ctrl+k  :", "paleta de comandos"},
 		{"j/k  ↑/↓", "mover la selección"},
 		{"esc", "limpiar filtros, cerrar ventanas"},
-		{"T", "tema de colores"},
-		{"?", "esta ayuda"},
+		{"?  T", "esta ayuda, tema de colores"},
 		{"ctrl+c", "salir"},
 	}},
 	{"Tareas", [][2]string{
 		{"o  a  h", "abiertas, todas, hechas"},
-		{"n", "nueva tarea"},
-		{"espacio", "marcar hecha"},
-		{"s", "cambiar estado"},
-		{"+  -", "subir o bajar prioridad"},
+		{"n  espacio", "nueva, marcar hecha"},
+		{"s  +  -", "estado, subir o bajar prioridad"},
 		{"e  d", "editar, borrar"},
-		{"enter", "ver detalle"},
+		{"enter  g", "ver detalle, ir al proyecto"},
 		{"/  f", "buscar, filtrar"},
-		{"g", "ir al proyecto"},
+	}},
+	{"Notas", [][2]string{
+		{"n  e  d", "nueva, editar, borrar"},
+		{"t  f", "filtrar por etiqueta o proyecto"},
+		{"/  enter", "buscar, leer completa"},
 	}},
 }
 
@@ -34,9 +35,8 @@ var helpRight = []helpSection{
 	{"Proyectos", [][2]string{
 		{"n  e  d", "nuevo, editar, borrar"},
 		{"S", "cambiar estado"},
-		{"c", "agregar cuota"},
-		{"x", "pagar la siguiente cuota"},
-		{"enter", "ver sus tareas"},
+		{"c  x", "agregar cuota, pagar la siguiente"},
+		{"enter  o", "ver sus tareas, ver sus notas"},
 	}},
 	{"Clientes", [][2]string{
 		{"n  e  d", "nuevo, editar, borrar"},
@@ -44,13 +44,13 @@ var helpRight = []helpSection{
 	}},
 	{"Cobros", [][2]string{
 		{"x", "marcar la cuota como pagada"},
-		{"u", "deshacer el pago (volver a pendiente)"},
 	}},
 	{"Creación rápida en la paleta", [][2]string{
 		{"t", "Diseñar logo @proyecto !alta ^viernes"},
 		{"c", "Juan Pérez #Empresa"},
 		{"p", "Sitio web @cliente $5000 usd ^20/12"},
 		{"$", "2500 @proyecto ^15/12"},
+		{"n", "Idea para el home @proyecto #idea"},
 	}},
 }
 

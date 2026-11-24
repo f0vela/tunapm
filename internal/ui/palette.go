@@ -41,7 +41,7 @@ type Palette struct {
 
 func newPalette(st store.Repo, prefill string) *Palette {
 	ti := textinput.New()
-	ti.Placeholder = "comando, entidad o t tarea · c cliente · p proyecto · $ cuota"
+	ti.Placeholder = "comando, entidad o t tarea · c cliente · p proyecto · $ cuota · n nota"
 	ti.Prompt = "› "
 	ti.SetValue(prefill)
 	ti.CursorEnd()
@@ -67,6 +67,9 @@ func (p *Palette) buildItems() []paletteItem {
 		{kind: "cmd", label: "Registrar cobro (cuota)", detail: "$", run: func(a *App) {
 			a.openPaymentForm(store.Payment{}, "", a.contextProjectID())
 		}},
+		{kind: "cmd", label: "Nueva nota", detail: "n", run: func(a *App) {
+			a.openNoteForm(store.Note{ProjectID: a.contextProjectRef()})
+		}},
 		{kind: "cmd", label: "Cambiar estado de proyecto", detail: "S", run: func(a *App) {
 			a.openProjectPicker("Proyecto a cambiar de estado", func(a *App, project store.Project) {
 				a.openProjectStatusPicker(project.ID)
@@ -76,6 +79,7 @@ func (p *Palette) buildItems() []paletteItem {
 		{kind: "cmd", label: "Ir a Proyectos", detail: "2", run: func(a *App) { a.setTab(tabProjects) }},
 		{kind: "cmd", label: "Ir a Clientes", detail: "3", run: func(a *App) { a.setTab(tabClients) }},
 		{kind: "cmd", label: "Ir a Cobros", detail: "4", run: func(a *App) { a.setTab(tabPayments) }},
+		{kind: "cmd", label: "Ir a Notas", detail: "5", run: func(a *App) { a.setTab(tabNotes) }},
 		{kind: "cmd", label: "Filtrar tareas por proyecto o cliente", detail: "f", run: func(a *App) {
 			a.openFilterPicker()
 		}},
@@ -114,6 +118,18 @@ func (p *Palette) buildItems() []paletteItem {
 			run: func(a *App) {
 				if a.tasks.selectByID(task.ID) {
 					a.setTab(tabTasks)
+				}
+			},
+		})
+	}
+	notes, _ := p.st.ListNotes(store.NoteFilter{})
+	for _, note := range notes {
+		items = append(items, paletteItem{
+			kind: "note", id: note.ID, label: "Nota · " + note.Title,
+			detail: strings.TrimSpace(note.ProjectName + " " + tagText(note.Tags)),
+			run: func(a *App) {
+				if a.notes.selectByID(note.ID) {
+					a.setTab(tabNotes)
 				}
 			},
 		})
@@ -299,6 +315,27 @@ func (a *App) executeDraft(d quickadd.Draft) {
 		a.toastf("Proyecto creado")
 		a.reloadAll()
 
+	case quickadd.KindNote:
+		proj := resolveProject(a.projects.projects, d.Target)
+		if d.Target != "" && proj == nil {
+			a.errf("No encontré el proyecto %q", d.Target)
+			return
+		}
+		note := store.Note{Title: d.Title, Tags: store.ParseTags(d.Tags)}
+		if proj != nil {
+			note.ProjectID = &proj.ID
+		}
+		if err := a.st.CreateNote(&note); err != nil {
+			a.palette = nil
+			a.errf("%v", err)
+			return
+		}
+		a.palette = nil
+		a.toastf("Nota creada · e para escribir el texto")
+		a.reloadAll()
+		a.notes.selectByID(note.ID)
+		a.setTab(tabNotes)
+
 	case quickadd.KindPayment:
 		proj := resolveProject(a.projects.projects, d.Target)
 		if d.Target != "" && proj == nil {
@@ -361,7 +398,7 @@ func (p *Palette) view() string {
 		if len(p.filtered) == 0 {
 			lines = append(lines, mutedStyle.Render("  sin coincidencias"))
 		}
-		lines = append(lines, "", renderHints("enter ejecutar · esc cerrar · t/c/p/$ crear rápido"))
+		lines = append(lines, "", renderHints("enter ejecutar · esc cerrar · t/c/p/$/n crear rápido"))
 	}
 	return modalStyle.Width(contentWidth + 8).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
@@ -394,6 +431,15 @@ func previewLines(a *App, d quickadd.Draft, parseErr error) []string {
 		}
 		lines = append(lines, kv("Presupuesto", budget))
 		lines = append(lines, kv("Entrega", datePreview(d.Date)))
+	case quickadd.KindNote:
+		lines = append(lines, sectionStyle.Render("Nueva nota"))
+		lines = append(lines, kv("Título", orDefault(d.Title, "-")))
+		project := mutedStyle.Render("sin proyecto")
+		if d.Target != "" {
+			project = targetOrMissing(a.projects.projects, d.Target)
+		}
+		lines = append(lines, kv("Proyecto", project))
+		lines = append(lines, kv("Etiquetas", orDefault(tagText(store.ParseTags(d.Tags)), mutedStyle.Render("ninguna"))))
 	case quickadd.KindPayment:
 		lines = append(lines, sectionStyle.Render("Nueva cuota"))
 		lines = append(lines, kv("Proyecto", targetOrMissing(a.projects.projects, d.Target)))

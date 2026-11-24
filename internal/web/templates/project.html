@@ -17,6 +17,10 @@
   <div class="sec-head"><h2>Cuotas</h2><a class="btn small" href="/payments/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Cuota</a></div>
   {{template "payment_rows" ctx .Data.Payments .Today .URL}}
 </section>
+<section>
+  <div class="sec-head"><h2>Notas</h2><a class="btn small" href="/notes/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Nota</a></div>
+  {{template "note_rows" ctx .Data.Notes .Today .URL}}
+</section>
 <form method="post" action="/projects/{{$p.ID}}/delete" onsubmit="return confirm('¿Eliminar proyecto con sus tareas y cuotas?')">
   <button class="btn danger" type="submit">Eliminar proyecto</button></form>
 {{end}}

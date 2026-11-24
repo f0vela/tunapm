@@ -85,3 +85,15 @@ func TestParseErrors(t *testing.T) {
 		t.Error("Parse(\"t Algo ^\") esperaba error por fecha vacía")
 	}
 }
+
+func TestParseNote(t *testing.T) {
+	got, err := Parse("n Revisar contrato ^urgente !ya @web-acme #Legal #pendiente-cliente")
+	want := Draft{Kind: KindNote, Title: "Revisar contrato ^urgente !ya", Target: "web-acme",
+		Tags: "Legal pendiente-cliente", Priority: -1, Currency: "GTQ"}
+	if err != nil || got != want {
+		t.Fatalf("Parse nota = %+v, %v; want %+v", got, err, want)
+	}
+	if _, err := Parse("n #solo-etiqueta"); !errors.Is(err, ErrMissingTitle) {
+		t.Fatalf("nota sin título: %v", err)
+	}
+}

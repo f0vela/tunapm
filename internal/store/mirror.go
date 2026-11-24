@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // Snapshot es una copia completa de los datos; el API la sirve en /api/snapshot
@@ -12,6 +13,7 @@ type Snapshot struct {
 	Projects []Project `json:"projects"`
 	Tasks    []Task    `json:"tasks"`
 	Payments []Payment `json:"payments"`
+	Notes    []Note    `json:"notes"`
 }
 
 // Snapshot lee todas las tablas (tareas hechas incluidas).
@@ -29,6 +31,12 @@ func (s *Store) Snapshot() (Snapshot, error) {
 	}
 	if snap.Payments, err = s.ListPayments(); err != nil {
 		return snap, err
+	}
+	if snap.Notes, err = s.ListNotes(NoteFilter{}); err != nil {
+		return snap, err
+	}
+	if snap.Notes == nil {
+		snap.Notes = []Note{}
 	}
 	if snap.Clients == nil {
 		snap.Clients = []Client{}
@@ -95,6 +103,15 @@ func putPayment(ex execer, p Payment) error {
 	return err
 }
 
+func putNote(ex execer, n Note) error {
+	_, err := ex.Exec(
+		`INSERT INTO notes (id, project_id, title, body, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, title = excluded.title, body = excluded.body,
+		   tags = excluded.tags, created_at = excluded.created_at, updated_at = excluded.updated_at`,
+		n.ID, n.ProjectID, n.Title, n.Body, strings.Join(NormalizeTags(n.Tags), ","), n.CreatedAt, n.UpdatedAt)
+	return err
+}
+
 // ReplaceAll sustituye todo el contenido por snap (IDs incluidos) en una transacción.
 func (s *Store) ReplaceAll(snap Snapshot) error {
 	tx, err := s.db.Begin()
@@ -105,7 +122,7 @@ func (s *Store) ReplaceAll(snap Snapshot) error {
 	if _, err := tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
 		return err
 	}
-	for _, table := range []string{"payments", "tasks", "projects", "clients"} {
+	for _, table := range []string{"notes", "payments", "tasks", "projects", "clients"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return err
 		}
@@ -130,12 +147,17 @@ func (s *Store) ReplaceAll(snap Snapshot) error {
 			return err
 		}
 	}
+	for _, n := range snap.Notes {
+		if err := putNote(tx, n); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
 // RemapID cambia el id de una fila (y las referencias de sus hijos). La caché lo usa
 // cuando el servidor asigna el id definitivo a algo creado sin conexión.
-// kind: "client", "project", "task" o "payment".
+// kind: "client", "project", "task", "payment" o "note".
 func (s *Store) RemapID(kind string, oldID, newID int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -150,11 +172,13 @@ func (s *Store) RemapID(kind string, oldID, newID int64) error {
 	case "client":
 		stmts = [][2]string{{"clients", "id"}, {"projects", "client_id"}}
 	case "project":
-		stmts = [][2]string{{"projects", "id"}, {"tasks", "project_id"}, {"payments", "project_id"}}
+		stmts = [][2]string{{"projects", "id"}, {"tasks", "project_id"}, {"payments", "project_id"}, {"notes", "project_id"}}
 	case "task":
 		stmts = [][2]string{{"tasks", "id"}}
 	case "payment":
 		stmts = [][2]string{{"payments", "id"}}
+	case "note":
+		stmts = [][2]string{{"notes", "id"}}
 	default:
 		return fmt.Errorf("tipo desconocido: %s", kind)
 	}
@@ -169,7 +193,7 @@ func (s *Store) RemapID(kind string, oldID, newID int64) error {
 // ReserveIDRange hace que las filas creadas localmente reciban ids >= base, para
 // distinguirlas de los ids reales del servidor hasta que se sincronicen.
 func (s *Store) ReserveIDRange(base int64) error {
-	for _, table := range []string{"clients", "projects", "tasks", "payments"} {
+	for _, table := range []string{"clients", "projects", "tasks", "payments", "notes"} {
 		if _, err := s.db.Exec(
 			`INSERT INTO sqlite_sequence (name, seq) SELECT ?, 0 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = ?)`,
 			table, table); err != nil {

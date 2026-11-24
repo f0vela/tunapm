@@ -99,6 +99,7 @@ final class Repo
                 'projects' => $this->listProjects(),
                 'tasks' => $this->listTasks(['mode' => 'todas']),
                 'payments' => $this->listPayments(),
+                'notes' => $this->listNotes(),
             ];
         } finally {
             $this->db->commit();
@@ -390,5 +391,137 @@ final class Repo
             $out[(int) $r['project_id']] = ['scheduled_cents' => (int) $r['s'], 'paid_cents' => (int) $r['p']];
         }
         return $out;
+    }
+
+    // ---------- notes ----------
+
+    private const NOTE = "SELECT n.id, n.project_id, n.title, n.body, n.tags, n.created_at, n.updated_at,
+        COALESCE(p.name, '') AS project_name, COALESCE(c.name, '') AS client_name
+        FROM notes n LEFT JOIN projects p ON p.id = n.project_id LEFT JOIN clients c ON c.id = p.client_id";
+
+    /** Minúsculas, sin "#" ni comas, guiones en vez de espacios (igual que store.NormalizeTag en Go). */
+    public static function normalizeTag(string $raw): string
+    {
+        $t = trim($raw);
+        $t = function_exists('mb_strtolower') ? mb_strtolower($t, 'UTF-8') : strtolower($t);
+        $t = str_replace(',', ' ', ltrim($t, '#'));
+        return implode('-', preg_split('/\s+/u', $t, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+    }
+
+    /** @param mixed $raw lista de etiquetas, o texto separado por espacios o comas */
+    public static function normalizeTags(mixed $raw): array
+    {
+        if (is_string($raw)) {
+            $raw = preg_split('/[\s,]+/u', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        }
+        if ($raw === null) {
+            return [];
+        }
+        if (!is_array($raw)) {
+            throw new BadInput('campo inválido: tags');
+        }
+        $out = [];
+        foreach ($raw as $tag) {
+            if (!is_scalar($tag)) {
+                throw new BadInput('campo inválido: tags');
+            }
+            $t = self::normalizeTag((string) $tag);
+            if ($t !== '' && !in_array($t, $out, true)) {
+                $out[] = $t;
+            }
+        }
+        return $out;
+    }
+
+    private static function noteRow(array $row): array
+    {
+        $row['tags'] = $row['tags'] === '' ? [] : explode(',', $row['tags']);
+        return $row;
+    }
+
+    public function getNote(int $id): array { return self::noteRow($this->one(self::NOTE . ' WHERE n.id = ?', [$id])); }
+
+    /** @param array{project_id?:int,unassigned?:bool,tag?:string,search?:string} $f */
+    public function listNotes(array $f = []): array
+    {
+        $where = [];
+        $args = [];
+        if (!empty($f['unassigned'])) {
+            $where[] = 'n.project_id IS NULL';
+        } elseif (!empty($f['project_id'])) {
+            $where[] = 'n.project_id = ?';
+            $args[] = (int) $f['project_id'];
+        }
+        $tag = self::normalizeTag((string) ($f['tag'] ?? ''));
+        if ($tag !== '') {
+            $where[] = "(',' || n.tags || ',') LIKE ?";
+            $args[] = '%,' . $tag . ',%';
+        }
+        $search = trim((string) ($f['search'] ?? ''));
+        if ($search !== '') {
+            $where[] = "(n.title LIKE ? OR n.body LIKE ? OR n.tags LIKE ? OR COALESCE(p.name, '') LIKE ?)";
+            $needle = '%' . $search . '%';
+            array_push($args, $needle, $needle, $needle, $needle);
+        }
+        $sql = self::NOTE . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY n.updated_at DESC, n.id DESC';
+        return array_map([self::class, 'noteRow'], $this->all($sql, $args));
+    }
+
+    /** Etiquetas en uso, de la más usada a la menos. @return list<array{tag:string,count:int}> */
+    public function noteTags(): array
+    {
+        $counts = [];
+        foreach ($this->all("SELECT tags FROM notes WHERE tags <> ''") as $row) {
+            foreach (explode(',', $row['tags']) as $t) {
+                $counts[$t] = ($counts[$t] ?? 0) + 1;
+            }
+        }
+        $out = [];
+        foreach ($counts as $t => $n) {
+            $out[] = ['tag' => (string) $t, 'count' => $n];
+        }
+        usort($out, fn (array $a, array $b) => $b['count'] <=> $a['count'] ?: strcmp($a['tag'], $b['tag']));
+        return $out;
+    }
+
+    private function noteFields(array $d): array
+    {
+        $pid = $d['project_id'] ?? null;
+        $pid = ($pid === null || $pid === '' || $pid === 0 || $pid === '0') ? null : self::int($d, 'project_id');
+        $body = $d['body'] ?? '';
+        if (!is_scalar($body)) {
+            throw new BadInput('campo inválido: body');
+        }
+        return [
+            $pid,
+            self::required(self::str($d, 'title'), 'title'),
+            (string) $body,
+            implode(',', self::normalizeTags($d['tags'] ?? [])),
+        ];
+    }
+
+    public function createNote(array $d): array
+    {
+        $now = self::now();
+        $this->guard(fn () => $this->q(
+            'INSERT INTO notes (project_id, title, body, tags, created_at, updated_at) VALUES (?,?,?,?,?,?)',
+            [...$this->noteFields($d), $now, $now]
+        ));
+        return $this->getNote((int) $this->db->lastInsertId());
+    }
+
+    public function updateNote(int $id, array $d): array
+    {
+        $st = $this->guard(fn () => $this->q(
+            'UPDATE notes SET project_id=?, title=?, body=?, tags=?, updated_at=? WHERE id=?',
+            [...$this->noteFields($d), self::now(), $id]
+        ));
+        $this->affected($st);
+        return $this->getNote($id);
+    }
+
+    public function deleteNote(int $id): void
+    {
+        $this->affected($this->q('DELETE FROM notes WHERE id = ?', [$id]));
     }
 }

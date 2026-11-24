@@ -247,6 +247,9 @@ func (r *Repo) DeleteProject(id int64) error {
 		if err := r.Store.DeleteProject(id); err != nil {
 			return id, nil, err
 		}
+		if err := r.detachPendingNotes(id); err != nil {
+			return id, nil, err
+		}
 		return id, nil, r.purgeTemp("project", id, children)
 	})
 }
@@ -271,6 +274,61 @@ func (r *Repo) DeleteTask(id int64) error {
 		}
 		return id, nil, r.purgeTemp("task", id, nil)
 	})
+}
+
+func (r *Repo) CreateNote(n *store.Note) error {
+	return r.write("note", "create", func() (int64, any, error) {
+		err := r.Store.CreateNote(n)
+		return n.ID, n, err // el id se lee DESPUÉS de crear (id temporal del espejo)
+	})
+}
+
+func (r *Repo) UpdateNote(n *store.Note) error {
+	return r.write("note", "update", func() (int64, any, error) {
+		return n.ID, n, r.Store.UpdateNote(n)
+	})
+}
+
+func (r *Repo) DeleteNote(id int64) error {
+	return r.write("note", "delete", func() (int64, any, error) {
+		if err := r.Store.DeleteNote(id); err != nil {
+			return id, nil, err
+		}
+		return id, nil, r.purgeTemp("note", id, nil)
+	})
+}
+
+// detachPendingNotes: al borrar un proyecto sus notas quedan sin proyecto, así que
+// las notas aún en la cola no deben seguir apuntando a él.
+func (r *Repo) detachPendingNotes(projectID int64) error {
+	rows, err := r.DB().Query("SELECT seq, body FROM outbox WHERE kind = 'note' AND body <> ''")
+	if err != nil {
+		return err
+	}
+	fixes := map[int64]string{}
+	for rows.Next() {
+		var seq int64
+		var body string
+		if err := rows.Scan(&seq, &body); err != nil {
+			rows.Close()
+			return err
+		}
+		var m map[string]json.RawMessage
+		var ref int64
+		if json.Unmarshal([]byte(body), &m) != nil || json.Unmarshal(m["project_id"], &ref) != nil || ref != projectID {
+			continue
+		}
+		m["project_id"] = json.RawMessage("null")
+		nb, _ := json.Marshal(m)
+		fixes[seq] = string(nb)
+	}
+	rows.Close()
+	for seq, body := range fixes {
+		if _, err := r.DB().Exec("UPDATE outbox SET body = ? WHERE seq = ?", body, seq); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repo) CreatePayment(p *store.Payment) error {
@@ -373,7 +431,7 @@ func (r *Repo) rewriteRefs(kind string, oldID, newID int64) error {
 	case "client":
 		childKinds, field = []string{"project"}, "client_id"
 	case "project":
-		childKinds, field = []string{"task", "payment"}, "project_id"
+		childKinds, field = []string{"task", "payment", "note"}, "project_id"
 	default:
 		return nil
 	}
@@ -546,6 +604,8 @@ func kindLabel(kind string) string {
 		return "proyecto"
 	case "task":
 		return "tarea"
+	case "note":
+		return "nota"
 	}
 	return "cuota"
 }
@@ -611,6 +671,25 @@ func (r *Repo) send(o op) (int64, error) {
 			return 0, r.api.UpdateTask(&t)
 		case "delete":
 			return 0, r.api.DeleteTask(o.entID)
+		}
+	case "note":
+		var n store.Note
+		if err := decodeBody(o, &n); err != nil {
+			return 0, err
+		}
+		if o.op != "delete" && n.ProjectID != nil && IsTemp(*n.ProjectID) {
+			return 0, errDependency
+		}
+		switch o.op {
+		case "create":
+			n.ID = 0
+			err := r.api.CreateNote(&n)
+			return n.ID, err
+		case "update":
+			n.ID = o.entID
+			return 0, r.api.UpdateNote(&n)
+		case "delete":
+			return 0, r.api.DeleteNote(o.entID)
 		}
 	case "payment":
 		switch o.op {

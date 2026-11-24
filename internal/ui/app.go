@@ -23,7 +23,7 @@ var keys = keyMap{
 	Quit:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "salir")),
 	Palette: key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("ctrl+k", "paleta")),
 	Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "ayuda")),
-	Tabs:    key.NewBinding(key.WithKeys("1", "2", "3", "4"), key.WithHelp("1-4", "vistas")),
+	Tabs:    key.NewBinding(key.WithKeys("1", "2", "3", "4", "5"), key.WithHelp("1-5", "vistas")),
 }
 
 const (
@@ -31,6 +31,7 @@ const (
 	tabProjects
 	tabClients
 	tabPayments
+	tabNotes
 )
 
 // Syncer lo implementa la caché local (internal/cache): avisa de cambios hechos por la
@@ -60,6 +61,7 @@ type App struct {
 	projects *Projects
 	clients  *Clients
 	payments *Payments
+	notes    *Notes
 
 	palette *Palette
 	picker  *Picker
@@ -82,6 +84,7 @@ func NewApp(st store.Repo) *App {
 	a.projects = newProjects(st)
 	a.clients = newClients(st)
 	a.payments = newPayments(st)
+	a.notes = newNotes(st)
 	a.syncer, _ = st.(Syncer)
 	a.layout()
 	return a
@@ -165,6 +168,10 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 		a.tasks.handleKey(a, msg)
 		return nil
 	}
+	if a.tab == tabNotes && a.notes.searching && !key.Matches(msg, keys.Quit) {
+		a.notes.handleKey(a, msg)
+		return nil
+	}
 
 	switch {
 	case key.Matches(msg, keys.Quit):
@@ -183,6 +190,8 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 		a.setTab(tabClients)
 	case msg.String() == "4":
 		a.setTab(tabPayments)
+	case msg.String() == "5":
+		a.setTab(tabNotes)
 	default:
 		switch a.tab {
 		case tabTasks:
@@ -193,6 +202,8 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 			a.clients.handleKey(a, msg)
 		case tabPayments:
 			a.payments.handleKey(a, msg)
+		case tabNotes:
+			a.notes.handleKey(a, msg)
 		}
 	}
 	return nil
@@ -215,6 +226,7 @@ func (a *App) layout() {
 	a.projects.layout(a.width, bodyH)
 	a.clients.layout(a.width, bodyH)
 	a.payments.layout(a.width, bodyH)
+	a.notes.layout(a.width, bodyH)
 	if a.palette != nil {
 		a.palette.layout(a.width, bodyH)
 	}
@@ -228,6 +240,7 @@ func (a *App) reloadAll() {
 	a.projects.reload()
 	a.clients.reload()
 	a.payments.reload()
+	a.notes.reload()
 }
 
 func (a *App) View() string {
@@ -268,7 +281,7 @@ func (a *App) View() string {
 const minWidth, minHeight = 50, 10
 
 func (a *App) tabsView() string {
-	labels := []string{"1 Tareas", "2 Proyectos", "3 Clientes", "4 Cobros"}
+	labels := []string{"1 Tareas", "2 Proyectos", "3 Clientes", "4 Cobros", "5 Notas"}
 	var b strings.Builder
 	for i, label := range labels {
 		style := tabInactiveStyle
@@ -331,6 +344,8 @@ func (a *App) activeView() string {
 		return a.clients.view()
 	case tabPayments:
 		return a.payments.view()
+	case tabNotes:
+		return a.notes.view()
 	default:
 		return a.tasks.view()
 	}
@@ -377,6 +392,8 @@ func (a *App) activeHints() string {
 		return a.clients.hints()
 	case tabPayments:
 		return a.payments.hints()
+	case tabNotes:
+		return a.notes.hints()
 	default:
 		return a.tasks.hints()
 	}
@@ -390,6 +407,8 @@ func (a *App) activeInfo() string {
 		return a.clients.info()
 	case tabPayments:
 		return a.payments.info()
+	case tabNotes:
+		return a.notes.info()
 	default:
 		return a.tasks.info()
 	}

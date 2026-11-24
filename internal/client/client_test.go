@@ -134,3 +134,92 @@ func TestSnapshotAndETag(t *testing.T) {
 		t.Fatal("tras un cambio el ETag debe cambiar")
 	}
 }
+
+func TestNotesRoundTrip(t *testing.T) {
+	c := setup(t)
+
+	cl := store.Client{Name: "Nora", Company: "Notas SA"}
+	if err := c.CreateClient(&cl); err != nil {
+		t.Fatal(err)
+	}
+	p := store.Project{ClientID: cl.ID, Name: "Proyecto con notas", Status: store.StatusActivo,
+		Currency: "GTQ", BillingType: store.BillingTotal}
+	if err := c.CreateProject(&p); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.CreateNote(&store.Note{Title: " "}); err == nil {
+		t.Fatal("una nota sin título debe rechazarse")
+	}
+	loose := store.Note{Title: "Suelta zzq", Body: "cuerpo", Tags: []string{"#Contrato-ZZQ", "contrato-zzq", "Dos Palabras"}}
+	if err := c.CreateNote(&loose); err != nil || loose.ID == 0 {
+		t.Fatalf("CreateNote: %v %+v", err, loose)
+	}
+	if len(loose.Tags) != 2 || loose.Tags[0] != "contrato-zzq" || loose.Tags[1] != "dos-palabras" || loose.ProjectID != nil {
+		t.Fatalf("nota creada: %+v", loose)
+	}
+	linked := store.Note{Title: "Del proyecto zzq", ProjectID: &p.ID, Tags: []string{"contrato-zzq"}}
+	if err := c.CreateNote(&linked); err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.GetNote(linked.ID)
+	if err != nil || got.ProjectID == nil || *got.ProjectID != p.ID || got.ProjectName != p.Name || got.ClientName != "Nora" {
+		t.Fatalf("GetNote: %v %+v", err, got)
+	}
+
+	byTag, err := c.ListNotes(store.NoteFilter{Tag: "contrato-zzq"})
+	if err != nil || len(byTag) != 2 {
+		t.Fatalf("por etiqueta: %v %d", err, len(byTag))
+	}
+	byProject, _ := c.ListNotes(store.NoteFilter{ProjectID: &p.ID})
+	if len(byProject) != 1 || byProject[0].ID != linked.ID {
+		t.Fatalf("por proyecto: %+v", byProject)
+	}
+	unassigned, _ := c.ListNotes(store.NoteFilter{Unassigned: true, Search: "zzq"})
+	if len(unassigned) != 1 || unassigned[0].ID != loose.ID {
+		t.Fatalf("sin proyecto: %+v", unassigned)
+	}
+	tags, err := c.NoteTags()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tc := range tags {
+		found = found || (tc.Tag == "contrato-zzq" && tc.Count == 2)
+	}
+	if !found {
+		t.Fatalf("NoteTags: %+v", tags)
+	}
+
+	// Quitar proyecto y etiquetas con una actualización.
+	linked.ProjectID, linked.Tags, linked.Body = nil, []string{}, "editada"
+	if err := c.UpdateNote(&linked); err != nil || linked.ProjectID != nil || len(linked.Tags) != 0 || linked.Body != "editada" {
+		t.Fatalf("UpdateNote: %v %+v", err, linked)
+	}
+
+	// Borrar el proyecto no borra sus notas.
+	again := store.Note{Title: "Sobrevive zzq", ProjectID: &p.ID}
+	if err := c.CreateNote(&again); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.GetNote(again.ID); err != nil || got.ProjectID != nil {
+		t.Fatalf("nota tras borrar el proyecto: %v %+v", err, got)
+	}
+	snap, err := c.Snapshot()
+	if err != nil || len(snap.Notes) < 3 {
+		t.Fatalf("Snapshot.Notes: %v %d", err, len(snap.Notes))
+	}
+
+	for _, n := range []int64{loose.ID, linked.ID, again.ID} {
+		if err := c.DeleteNote(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.GetNote(loose.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetNote tras borrar: %v", err)
+	}
+	_ = c.DeleteClient(cl.ID)
+}

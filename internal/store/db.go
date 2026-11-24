@@ -19,6 +19,9 @@ var (
 //go:embed migrations/001_init.sql
 var initSQL string
 
+//go:embed migrations/002_notes.sql
+var notesSQL string
+
 type Store struct {
 	db *sql.DB
 }
@@ -66,14 +69,19 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version >= 1 {
-		return nil
+	// Cada migración se aplica una sola vez y sube user_version.
+	for i, script := range []string{initSQL, notesSQL} {
+		if version > i {
+			continue
+		}
+		if _, err := s.db.Exec(script); err != nil {
+			return fmt.Errorf("migración %03d: %w", i+1, err)
+		}
+		if _, err := s.db.Exec(fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			return err
+		}
 	}
-	if _, err := s.db.Exec(initSQL); err != nil {
-		return fmt.Errorf("migración 001: %w", err)
-	}
-	_, err := s.db.Exec("PRAGMA user_version = 1")
-	return err
+	return nil
 }
 
 func nullStr(s string) any {

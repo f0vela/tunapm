@@ -268,3 +268,59 @@ func TestReadsAndWritesDoNotWaitForNetwork(t *testing.T) {
 		t.Fatalf("lecturas/escrituras tardaron %v con servidor lento: esperan a la red", elapsed)
 	}
 }
+
+func TestOfflineNotesSyncWithRemappedProject(t *testing.T) {
+	e := newEnv(t, true)
+	_ = e.repo.SyncNow()
+
+	c := store.Client{Name: "Ana"}
+	must(t, e.repo.CreateClient(&c))
+	keep := store.Project{ClientID: c.ID, Name: "Se queda", Status: "activo", Currency: "GTQ", BillingType: store.BillingTotal}
+	must(t, e.repo.CreateProject(&keep))
+	gone := store.Project{ClientID: c.ID, Name: "Se borra", Status: "activo", Currency: "GTQ", BillingType: store.BillingTotal}
+	must(t, e.repo.CreateProject(&gone))
+
+	loose := store.Note{Title: "Suelta", Tags: []string{"Idea"}}
+	must(t, e.repo.CreateNote(&loose))
+	linked := store.Note{Title: "Del proyecto", ProjectID: &keep.ID, Tags: []string{"reunion"}}
+	must(t, e.repo.CreateNote(&linked))
+	orphan := store.Note{Title: "Queda huérfana", ProjectID: &gone.ID}
+	must(t, e.repo.CreateNote(&orphan))
+	linked.Body = "editada sin conexión"
+	must(t, e.repo.UpdateNote(&linked))
+	must(t, e.repo.DeleteProject(gone.ID))
+
+	if notes, _ := e.repo.ListNotes(store.NoteFilter{}); len(notes) != 3 {
+		t.Fatalf("notas locales = %d, want 3", len(notes))
+	}
+
+	e.down.Store(false)
+	settle(t, e, func() bool { return pending(e) == 0 })
+	if notices := e.repo.TakeNotices(); len(notices) != 0 {
+		t.Fatalf("no debería haber rechazos: %v", notices)
+	}
+
+	projects, _ := e.server.ListProjects()
+	notes, _ := e.server.ListNotes(store.NoteFilter{})
+	if len(projects) != 1 || len(notes) != 3 {
+		t.Fatalf("servidor: %d proyectos, %d notas", len(projects), len(notes))
+	}
+	byTitle := map[string]store.Note{}
+	for _, n := range notes {
+		byTitle[n.Title] = n
+	}
+	if n := byTitle["Del proyecto"]; n.ProjectID == nil || *n.ProjectID != projects[0].ID || n.Body != "editada sin conexión" {
+		t.Fatalf("nota enlazada mal remapeada: %+v", n)
+	}
+	if byTitle["Suelta"].ProjectID != nil || byTitle["Queda huérfana"].ProjectID != nil {
+		t.Fatalf("estas notas no deben tener proyecto: %+v", notes)
+	}
+	if got := byTitle["Suelta"].Tags; len(got) != 1 || got[0] != "idea" {
+		t.Fatalf("etiquetas: %v", got)
+	}
+	// El espejo quedó con los ids reales del servidor.
+	local, _ := e.repo.ListNotes(store.NoteFilter{ProjectID: &projects[0].ID})
+	if len(local) != 1 || local[0].ID != byTitle["Del proyecto"].ID {
+		t.Fatalf("espejo tras sincronizar: %+v", local)
+	}
+}

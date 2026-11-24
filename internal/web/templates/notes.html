@@ -1,0 +1,22 @@
+{{define "notes"}}
+<div class="sec-head"><h1>Notas</h1><a class="btn small primary" href="/notes/new?{{if and .Data.Project (ne .Data.Project "none")}}project_id={{.Data.Project}}&{{end}}{{if .Data.Tag}}tag={{.Data.Tag}}&{{end}}next={{.URL}}">+ Nueva</a></div>
+<form method="get" class="filters notes-filters">
+  <input type="search" name="q" value="{{.Data.Q}}" placeholder="Buscar…">
+  <select name="project_id" onchange="this.form.submit()">
+    <option value="">Todos los proyectos</option>
+    <option value="none" {{if eq .Data.Project "none"}}selected{{end}}>Sin proyecto</option>
+    {{$sel := .Data.Project}}
+    {{range .Data.Projects}}<option value="{{.ID}}" {{if eq (printf "%d" .ID) $sel}}selected{{end}}>{{.Name}}</option>{{end}}
+  </select>
+  {{if .Data.Tag}}<input type="hidden" name="tag" value="{{.Data.Tag}}">{{end}}
+  <button class="btn small" type="submit">Filtrar</button>
+</form>
+{{if .Data.Tags}}
+<nav class="tags" aria-label="Etiquetas">
+  {{$tag := .Data.Tag}}{{$q := .Data.Q}}{{$p := .Data.Project}}
+  <a class="tag {{if not $tag}}on{{end}}" href="/notes?q={{$q}}&project_id={{$p}}">Todas</a>
+  {{range .Data.Tags}}<a class="tag {{if eq .Tag $tag}}on{{end}}" href="/notes?tag={{.Tag}}&q={{$q}}&project_id={{$p}}">#{{.Tag}} <small>{{.Count}}</small></a>{{end}}
+</nav>
+{{end}}
+{{template "note_rows" ctx .Data.Notes .Today .URL}}
+{{end}}

@@ -121,6 +121,24 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/tasks/{id}", update(s.repo.UpdateTask, func(t *store.Task, id int64) { t.ID = id }))
 	m.HandleFunc("DELETE /api/tasks/{id}", del(s.repo.DeleteTask))
 
+	m.HandleFunc("GET /api/notes", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		f := store.NoteFilter{Tag: q.Get("tag"), Search: q.Get("search")}
+		// project_id=none pide las notas sin proyecto.
+		if q.Get("project_id") == "none" {
+			f.Unassigned = true
+		} else if v, err := strconv.ParseInt(q.Get("project_id"), 10, 64); err == nil {
+			f.ProjectID = &v
+		}
+		out, err := s.repo.ListNotes(f)
+		respond(w, 200, nonNil(out), err)
+	})
+	m.HandleFunc("GET /api/notes/tags", list(s.repo.NoteTags))
+	m.HandleFunc("POST /api/notes", create(s.repo.CreateNote))
+	m.HandleFunc("GET /api/notes/{id}", get(s.repo.GetNote))
+	m.HandleFunc("PUT /api/notes/{id}", update(s.repo.UpdateNote, func(n *store.Note, id int64) { n.ID = id }))
+	m.HandleFunc("DELETE /api/notes/{id}", del(s.repo.DeleteNote))
+
 	m.HandleFunc("GET /api/payments", list(s.repo.ListPayments))
 	m.HandleFunc("POST /api/payments", create(s.repo.CreatePayment))
 	m.HandleFunc("GET /api/payments/{id}", get(s.repo.GetPayment))
@@ -285,6 +303,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, 409, CodeTotalOneQuote, err.Error())
 	case errors.Is(err, store.ErrInvalidAmount):
 		writeErr(w, 422, CodeInvalidAmount, err.Error())
+	case errors.Is(err, store.ErrNoteTitle):
+		writeErr(w, 422, CodeBadRequest, err.Error())
 	case strings.Contains(err.Error(), "constraint failed"):
 		// CHECK / FOREIGN KEY / NOT NULL de SQLite: datos inválidos del cliente.
 		writeErr(w, 422, CodeBadRequest, err.Error())

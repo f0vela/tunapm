@@ -41,7 +41,7 @@
 </main>
 <?php if ($nav !== ''): ?>
 <nav class="tabs">
-  <?php foreach ([['inicio', '/', 'Inicio'], ['tareas', '/tasks', 'Tareas'], ['proyectos', '/projects', 'Proyectos'], ['cuotas', '/payments', 'Cuotas'], ['clientes', '/clients', 'Clientes']] as [$k, $href, $label]): ?>
+  <?php foreach ([['inicio', '/', 'Inicio'], ['tareas', '/tasks', 'Tareas'], ['proyectos', '/projects', 'Proyectos'], ['cuotas', '/payments', 'Cuotas'], ['clientes', '/clients', 'Clientes'], ['notas', '/notes', 'Notas']] as [$k, $href, $label]): ?>
     <a href="<?= $href ?>"<?= $nav === $k ? ' class="on"' : '' ?>><?= $label ?></a>
   <?php endforeach ?>
 </nav>

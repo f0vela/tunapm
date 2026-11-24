@@ -97,6 +97,22 @@ var funcs = template.FuncMap{
 	"list":        func(v ...string) []string { return v },
 	"ctx":         func(items any, today, url string) listCtx { return listCtx{items, today, url} },
 	"asset":       asset,
+	"join":        strings.Join,
+	"localDate":   store.LocalDate,
+	"derefID": func(id *int64) int64 {
+		if id == nil {
+			return 0
+		}
+		return *id
+	},
+	// excerpt resume el texto de una nota en una línea para las listas.
+	"excerpt": func(body string) string {
+		line := strings.Join(strings.Fields(body), " ")
+		if r := []rune(line); len(r) > 140 {
+			return string(r[:140]) + "…"
+		}
+		return line
+	},
 }
 
 var assetVersions sync.Map
@@ -216,6 +232,13 @@ func (s *Server) routes() {
 	g("GET /clients/{id}/edit", s.clientEdit)
 	g("POST /clients/{id}", s.clientSave)
 	g("POST /clients/{id}/delete", s.clientDelete)
+
+	g("GET /notes", s.notesList)
+	g("GET /notes/new", s.noteNew)
+	g("POST /notes", s.noteSave)
+	g("GET /notes/{id}/edit", s.noteEdit)
+	g("POST /notes/{id}", s.noteSave)
+	g("POST /notes/{id}/delete", s.noteDelete)
 
 	g("GET /payments", s.paymentsList)
 	g("GET /payments/new", s.paymentNew)

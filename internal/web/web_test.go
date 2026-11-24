@@ -40,7 +40,8 @@ func TestWebFlow(t *testing.T) {
 	}
 
 	for _, path := range []string{"/", "/tasks", "/projects", "/projects/1", "/clients", "/clients/1", "/payments",
-		"/tasks/new", "/projects/new", "/payments/new", "/clients/new", "/static/app.css"} {
+		"/tasks/new", "/projects/new", "/payments/new", "/clients/new", "/static/app.css",
+		"/notes", "/notes/new", "/notes?project_id=none&tag=idea&q=x"} {
 		r, _ := cli.Get(srv.URL + path)
 		if r.StatusCode != 200 {
 			t.Errorf("GET %s = %d", path, r.StatusCode)
@@ -76,6 +77,32 @@ func TestWebFlow(t *testing.T) {
 	}
 	if tk, _ := st.GetTask(1); tk.Status != store.TaskHecho {
 		t.Fatalf("tarea = %+v", tk)
+	}
+	// Notas: con proyecto, sin proyecto, etiquetas normalizadas, edición y borrado.
+	r, _ = cli.PostForm(srv.URL+"/notes", url.Values{"title": {"Acta"}, "project_id": {"1"}, "tags": {"Reunión, #Idea idea"}, "body": {"línea 1\r\nlínea 2"}})
+	if r.StatusCode != 303 {
+		t.Fatalf("crear nota = %d", r.StatusCode)
+	}
+	note, _ := st.GetNote(1)
+	if note.ProjectID == nil || strings.Join(note.Tags, ",") != "reunión,idea" || note.Body != "línea 1\nlínea 2" {
+		t.Fatalf("nota = %+v", note)
+	}
+	if r, _ = cli.PostForm(srv.URL+"/notes/1", url.Values{"title": {"Acta 2"}, "project_id": {""}, "tags": {""}}); r.StatusCode != 303 {
+		t.Fatalf("editar nota = %d", r.StatusCode)
+	}
+	if note, _ = st.GetNote(1); note.ProjectID != nil || len(note.Tags) != 0 || note.Title != "Acta 2" {
+		t.Fatalf("nota editada = %+v", note)
+	}
+	for _, path := range []string{"/notes", "/notes/1/edit", "/projects/1"} {
+		if r, _ := cli.Get(srv.URL + path); r.StatusCode != 200 {
+			t.Errorf("GET %s = %d", path, r.StatusCode)
+		}
+	}
+	if r, _ = cli.PostForm(srv.URL+"/notes", url.Values{"title": {" "}}); r.StatusCode != 422 {
+		t.Fatalf("nota sin título = %d", r.StatusCode)
+	}
+	if r, _ = cli.PostForm(srv.URL+"/notes/1/delete", nil); r.StatusCode != 303 {
+		t.Fatalf("borrar nota = %d", r.StatusCode)
 	}
 	// Error de validación se muestra en el formulario.
 	r, _ = cli.PostForm(srv.URL+"/payments", url.Values{"project_id": {"1"}, "amount": {"abc"}, "scheduled_date": {"2026-12-01"}})

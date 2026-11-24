@@ -34,6 +34,13 @@ type Repo interface {
 	ProjectTotals(projectID int64) (ProjectTotals, error)
 	AllProjectTotals() (map[int64]ProjectTotals, error)
 
+	CreateNote(n *Note) error
+	UpdateNote(n *Note) error
+	DeleteNote(id int64) error
+	GetNote(id int64) (Note, error)
+	ListNotes(f NoteFilter) ([]Note, error)
+	NoteTags() ([]TagCount, error)
+
 	Snapshot() (Snapshot, error)
 }
 

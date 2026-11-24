@@ -310,3 +310,73 @@ func TestPaymentStatusAndTotals(t *testing.T) {
 		t.Fatalf("orden de cuotas = %+v", all)
 	}
 }
+
+func TestNotes(t *testing.T) {
+	s := newTestStore(t)
+	c := mustClient(t, s, "Ana")
+	p := mustProject(t, s, c.ID, BillingTotal)
+
+	if err := s.CreateNote(&Note{Title: "  "}); !errors.Is(err, ErrNoteTitle) {
+		t.Fatalf("título vacío: %v", err)
+	}
+	loose := Note{Title: "Idea suelta", Body: "texto", Tags: []string{"#Idea", "idea", "Para Revisar", ""}}
+	if err := s.CreateNote(&loose); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(loose.Tags); got != "[idea para-revisar]" {
+		t.Fatalf("etiquetas normalizadas = %s", got)
+	}
+	linked := Note{Title: "Acta de reunión", ProjectID: &p.ID, Tags: []string{"reunion", "idea"}}
+	if err := s.CreateNote(&linked); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetNote(linked.ID)
+	if err != nil || got.ProjectName != p.Name || got.ClientName != "Ana" || got.ProjectID == nil {
+		t.Fatalf("GetNote: %v %+v", err, got)
+	}
+	count := func(f NoteFilter) int {
+		notes, err := s.ListNotes(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(notes)
+	}
+	if count(NoteFilter{}) != 2 || count(NoteFilter{Unassigned: true}) != 1 || count(NoteFilter{ProjectID: &p.ID}) != 1 {
+		t.Fatal("filtros por proyecto")
+	}
+	// "idea" no debe coincidir con una etiqueta que solo la contiene.
+	other := Note{Title: "Otra", Tags: []string{"ideas-viejas"}}
+	if err := s.CreateNote(&other); err != nil {
+		t.Fatal(err)
+	}
+	if count(NoteFilter{Tag: "idea"}) != 2 || count(NoteFilter{Tag: "#Reunion"}) != 1 || count(NoteFilter{Search: "acta"}) != 1 {
+		t.Fatal("filtros por etiqueta y búsqueda")
+	}
+	tags, err := s.NoteTags()
+	if err != nil || len(tags) != 4 || tags[0] != (TagCount{"idea", 2}) {
+		t.Fatalf("NoteTags: %v %+v", err, tags)
+	}
+
+	// Quitar el proyecto y borrar el proyecto dejan la nota suelta, no la borran.
+	linked.Tags = nil
+	if err := s.UpdateNote(&linked); err != nil || len(linked.Tags) != 0 {
+		t.Fatalf("UpdateNote: %v", err)
+	}
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetNote(linked.ID); err != nil || got.ProjectID != nil || got.ProjectName != "" {
+		t.Fatalf("la nota debe sobrevivir sin proyecto: %v %+v", err, got)
+	}
+	if err := s.DeleteNote(loose.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetNote(loose.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetNote tras borrar: %v", err)
+	}
+	snap, err := s.Snapshot()
+	if err != nil || len(snap.Notes) != 2 {
+		t.Fatalf("Snapshot.Notes: %v %d", err, len(snap.Notes))
+	}
+}

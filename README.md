@@ -30,7 +30,7 @@ Para probar sin capturar datos:
 
 ## Vistas
 
-Arriba están las pestañas `1 Tareas · 2 Proyectos · 3 Clientes · 4 Cobros`.
+Arriba están las pestañas `1 Tareas · 2 Proyectos · 3 Clientes · 4 Cobros · 5 Notas`.
 La vista principal es Tareas. Abajo, la barra de estado muestra el filtro y
 los atajos de la vista actual.
 
@@ -68,6 +68,14 @@ los atajos de la vista actual.
 Agrupados en vencidos, próximos 30 días, más adelante y pagados recientes,
 con totales por moneda. `j`/`k` mueven y `x` marca la cuota como pagada.
 
+### Notas
+
+Notas libres, con o sin proyecto, organizadas por etiquetas. `n` crea, `e`
+edita, `d` borra y `enter` la abre completa. `t` filtra por etiqueta, `f` por
+proyecto (o "sin proyecto"), `/` busca y `esc` limpia los filtros. Desde
+Proyectos, `o` abre las notas del proyecto seleccionado. Las etiquetas se
+escriben separadas por espacio o coma y se guardan en minúsculas.
+
 ## Paleta de comandos
 
 `ctrl+k` o `:` abre la paleta. Busca comandos, clientes, proyectos y tareas, o
@@ -78,11 +86,12 @@ t Diseñar logo @web-acme !alta ^viernes
 c Juan Pérez #Acme
 p Sitio web @acme $5000 usd ^2026-12-20
 $ 2500 @web-acme ^15/12
+n Idea para el home @web-acme #idea #diseño
 ```
 
 - `@` proyecto (o cliente, al crear un proyecto), con búsqueda difusa; usa
   guiones para nombres con espacios (`@web-acme`).
-- `#` empresa del cliente.
+- `#` empresa del cliente; en una nota, cada `#palabra` es una etiqueta.
 - `!baja|media|alta|urgente`.
 - `^fecha`: `hoy`, `mañana`, `lun`…`dom`, `+3d`, `+2s`, `15/12`,
   `2026-12-15`.

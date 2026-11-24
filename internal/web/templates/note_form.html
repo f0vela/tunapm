@@ -1,0 +1,24 @@
+{{define "note_form"}}
+{{$n := .Data.Note}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $n.ID}}/notes/{{$n.ID}}{{else}}/notes{{end}}" class="card form">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <label>Título<input name="title" value="{{$n.Title}}" required {{if not $n.ID}}autofocus{{end}}></label>
+  <label>Proyecto
+    <select name="project_id">
+      <option value="">Sin proyecto</option>
+      {{$pid := derefID $n.ProjectID}}
+      {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $pid}}selected{{end}}>{{.Name}} · {{.ClientName}}</option>{{end}}
+    </select></label>
+  <label>Etiquetas
+    <input name="tags" value="{{join $n.Tags " "}}" placeholder="idea reunion pendiente-cliente" autocapitalize="none" autocomplete="off" list="tag-list">
+    <small>Separadas por espacio o coma. Sirven para filtrar las notas.</small></label>
+  <datalist id="tag-list">{{range .Data.Tags}}<option value="{{.Tag}}">{{end}}</datalist>
+  <label>Texto<textarea name="body" rows="12">{{$n.Body}}</textarea></label>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{if $n.ID}}
+<form method="post" action="/notes/{{$n.ID}}/delete" onsubmit="return confirm('¿Eliminar nota?')">
+  <input type="hidden" name="next" value="{{.Data.Next}}"><button class="btn danger" type="submit">Eliminar nota</button></form>
+{{end}}
+{{end}}

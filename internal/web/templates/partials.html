@@ -38,3 +38,19 @@
 {{end}}
 </ul>
 {{end}}
+
+{{define "note_rows"}}
+{{if not .Items}}<p class="empty">Sin notas.</p>{{end}}
+<ul class="rows">
+{{range .Items}}
+<li class="row note">
+  <a class="grow" href="/notes/{{.ID}}/edit?next={{$.URL}}">
+    <strong>{{.Title}}</strong>
+    <small>{{if .ProjectName}}{{.ProjectName}}{{else}}Sin proyecto{{end}} · {{humanS (localDate .UpdatedAt) $.Today}}</small>
+    {{if .Body}}<small class="preview">{{excerpt .Body}}</small>{{end}}
+  </a>
+  {{if .Tags}}<span class="row-tags">{{range .Tags}}<a class="tag" href="/notes?tag={{.}}">#{{.}}</a>{{end}}</span>{{end}}
+</li>
+{{end}}
+</ul>
+{{end}}

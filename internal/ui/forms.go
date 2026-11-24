@@ -311,6 +311,12 @@ func (a *App) openFormFromDraft(d quickadd.Draft) {
 			clientID = client.ID
 		}
 		a.openProjectForm(project, d.Date, clientID)
+	case quickadd.KindNote:
+		note := store.Note{Title: d.Title, Tags: store.ParseTags(d.Tags), ProjectID: a.contextProjectRef()}
+		if proj := resolveProject(a.projects.projects, d.Target); proj != nil {
+			note.ProjectID = &proj.ID
+		}
+		a.openNoteForm(note)
 	case quickadd.KindPayment:
 		payment := store.Payment{AmountCents: d.AmountCents}
 		projectID := a.contextProjectID()
@@ -331,6 +337,17 @@ func (a *App) contextProjectID() int64 {
 		return *a.tasks.projectFilter
 	}
 	return 0
+}
+
+// contextProjectRef es contextProjectID como referencia opcional (nil = sin proyecto).
+func (a *App) contextProjectRef() *int64 {
+	if a.tab == tabNotes {
+		return a.notes.projectFilter
+	}
+	if id := a.contextProjectID(); id != 0 {
+		return &id
+	}
+	return nil
 }
 
 func validateDate(s string) error {

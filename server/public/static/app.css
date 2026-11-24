@@ -149,6 +149,8 @@ section { margin: 0 0 28px; }
   border-top: 2px solid transparent; margin-top: -1px;
 }
 .tabs a:hover { color: var(--text); text-decoration: none; }
+/* Seis pestañas en un teléfono angosto: letra un poco menor para que quepan. */
+@media (max-width: 420px) { .tabs a { font-size: 0.72rem; } }
 .tabs a.on { color: var(--accent); border-top-color: var(--accent); font-weight: 600; }
 
 @media (min-width: 960px) {
@@ -215,6 +217,23 @@ section { margin: 0 0 28px; }
 .pill.p2 { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .pill.p3 { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 .pill.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+
+/* Etiquetas de notas: fila de filtros y chips dentro de cada fila. */
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.tag {
+  display: inline-block; font-size: 0.8rem; font-weight: 500; padding: 3px 10px; border-radius: 99px; white-space: nowrap;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.tag:hover { text-decoration: none; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.tag.on { color: var(--on-accent); background: var(--accent); }
+.tag small { color: inherit; opacity: 0.75; font-size: 0.75rem; }
+.row.note { align-items: flex-start; flex-wrap: wrap; }
+.row-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 45%; padding-top: 2px; }
+.row-tags .tag { font-size: 0.72rem; padding: 2px 8px; }
+@media (max-width: 600px) { .row-tags { max-width: 100%; width: 100%; justify-content: flex-start; padding-top: 0; } }
+.row small.preview { margin-top: 4px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.form label small { font-weight: 400; }
+@media (min-width: 720px) { .filters.notes-filters { grid-template-columns: 2fr 1.5fr auto; } }
 
 .bar { height: 4px; border-radius: 2px; background: var(--line); margin: 8px 0 6px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }

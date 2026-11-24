@@ -199,6 +199,7 @@ type projectDetail struct {
 	Tasks    []store.Task
 	Payments []store.Payment
 	Totals   store.ProjectTotals
+	Notes    []store.Note
 }
 
 func (s *Server) projectShow(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +212,8 @@ func (s *Server) projectShow(w http.ResponseWriter, r *http.Request) {
 	tasks, _ := s.repo.ListTasks(store.TaskFilter{Mode: store.FilterAll, ProjectID: &id})
 	pays, _ := s.repo.PaymentsByProject(id)
 	totals, _ := s.repo.ProjectTotals(id)
-	s.render(w, r, "project", "proyectos", p.Name, projectDetail{p, tasks, pays, totals}, 200, "")
+	notes, _ := s.repo.ListNotes(store.NoteFilter{ProjectID: &id})
+	s.render(w, r, "project", "proyectos", p.Name, projectDetail{p, tasks, pays, totals, notes}, 200, "")
 }
 
 type projectForm struct {
@@ -477,4 +479,109 @@ func (s *Server) paymentDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back(w, r, "/payments", "Cuota eliminada")
+}
+
+// ---------- notes ----------
+
+type notesData struct {
+	Notes    []store.Note
+	Tags     []store.TagCount
+	Projects []store.Project
+	Q        string
+	Tag      string
+	Project  string // "", "none" o el id del proyecto
+}
+
+func (s *Server) notesList(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	d := notesData{Q: q.Get("q"), Tag: store.NormalizeTag(q.Get("tag")), Project: q.Get("project_id")}
+	f := store.NoteFilter{Search: d.Q, Tag: d.Tag}
+	if d.Project == "none" {
+		f.Unassigned = true
+	} else if pid := queryID(r, "project_id"); pid > 0 {
+		f.ProjectID = &pid
+	} else {
+		d.Project = ""
+	}
+	var err error
+	if d.Notes, err = s.repo.ListNotes(f); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d.Tags, _ = s.repo.NoteTags()
+	d.Projects, _ = s.repo.ListProjects()
+	s.render(w, r, "notes", "notas", "Notas", d, 200, "")
+}
+
+type noteForm struct {
+	Note     store.Note
+	Projects []store.Project
+	Tags     []store.TagCount
+	Next     string
+}
+
+func (s *Server) noteFormPage(w http.ResponseWriter, r *http.Request, n store.Note, status int, errMsg string) {
+	projects, err := s.repo.ListProjects()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	tags, _ := s.repo.NoteTags()
+	title := "Nueva nota"
+	if n.ID != 0 {
+		title = "Editar nota"
+	}
+	s.render(w, r, "note_form", "notas", title, noteForm{n, projects, tags, r.FormValue("next")}, status, errMsg)
+}
+
+func (s *Server) noteNew(w http.ResponseWriter, r *http.Request) {
+	n := store.Note{Tags: store.ParseTags(r.URL.Query().Get("tag"))}
+	if pid := queryID(r, "project_id"); pid > 0 {
+		n.ProjectID = &pid
+	}
+	s.noteFormPage(w, r, n, 200, "")
+}
+
+func (s *Server) noteEdit(w http.ResponseWriter, r *http.Request) {
+	n, err := s.repo.GetNote(pathID(r))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.noteFormPage(w, r, n, 200, "")
+}
+
+func (s *Server) noteSave(w http.ResponseWriter, r *http.Request) {
+	n := store.Note{
+		ID:    pathID(r),
+		Title: strings.TrimSpace(r.FormValue("title")),
+		Body:  strings.ReplaceAll(strings.TrimSpace(r.FormValue("body")), "\r\n", "\n"),
+		Tags:  store.ParseTags(r.FormValue("tags")),
+	}
+	if pid := formID(r, "project_id"); pid > 0 {
+		n.ProjectID = &pid
+	}
+	if n.Title == "" {
+		s.noteFormPage(w, r, n, 422, "El título es obligatorio")
+		return
+	}
+	var err error
+	if n.ID == 0 {
+		err = s.repo.CreateNote(&n)
+	} else {
+		err = s.repo.UpdateNote(&n)
+	}
+	if err != nil {
+		s.noteFormPage(w, r, n, 422, errText(err))
+		return
+	}
+	back(w, r, "/notes", "Nota guardada")
+}
+
+func (s *Server) noteDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.repo.DeleteNote(pathID(r)); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	back(w, r, "/notes", "Nota eliminada")
 }

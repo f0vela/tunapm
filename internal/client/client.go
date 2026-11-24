@@ -254,3 +254,34 @@ func (c *Client) AllProjectTotals() (v map[int64]store.ProjectTotals, err error)
 	err = c.do("GET", "/api/projects/totals", nil, &v)
 	return
 }
+
+// --- notes ---
+
+func (c *Client) CreateNote(v *store.Note) error { return c.do("POST", "/api/notes", v, v) }
+func (c *Client) UpdateNote(v *store.Note) error { return c.do("PUT", "/api/notes/"+id(v.ID), v, v) }
+func (c *Client) DeleteNote(n int64) error       { return c.do("DELETE", "/api/notes/"+id(n), nil, nil) }
+func (c *Client) GetNote(n int64) (v store.Note, err error) {
+	err = c.do("GET", "/api/notes/"+id(n), nil, &v)
+	return
+}
+func (c *Client) ListNotes(f store.NoteFilter) (v []store.Note, err error) {
+	q := url.Values{}
+	switch {
+	case f.Unassigned:
+		q.Set("project_id", "none")
+	case f.ProjectID != nil:
+		q.Set("project_id", id(*f.ProjectID))
+	}
+	if f.Tag != "" {
+		q.Set("tag", f.Tag)
+	}
+	if f.Search != "" {
+		q.Set("search", f.Search)
+	}
+	err = c.do("GET", "/api/notes?"+q.Encode(), nil, &v)
+	return
+}
+func (c *Client) NoteTags() (v []store.TagCount, err error) {
+	err = c.do("GET", "/api/notes/tags", nil, &v)
+	return
+}

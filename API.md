@@ -43,7 +43,13 @@ tuna            # sin TUNA_API sigue usando SQLite local
 | projects  | `GET/POST /api/projects`, `GET/PUT/DELETE /api/projects/{id}`, `/payments`, `/totals`; `GET /api/projects/totals`, `/progress` |
 | tasks     | `GET /api/tasks?mode=abiertas\|hechas\|todas&project_id=&client_id=&search=`, `POST`, `GET/PUT/DELETE /api/tasks/{id}` |
 | payments  | `GET/POST /api/payments`, `GET/PUT/DELETE /api/payments/{id}`, `POST /api/payments/{id}/pay` `{"date":"YYYY-MM-DD"}` |
+| notes     | `GET /api/notes?project_id=<id>\|none&tag=&search=`, `POST`, `GET/PUT/DELETE /api/notes/{id}`, `GET /api/notes/tags` |
 | health    | `GET /api/health` (sin auth) |
+
+Notas: `{"title","body","project_id","tags"}`. `project_id` es opcional (`null` = nota sin proyecto; `project_id=none`
+en el listado las filtra). `tags` es una lista; el servidor las normaliza (minúsculas, sin `#`, guiones en vez de
+espacios, sin duplicados). `GET /api/notes/tags` devuelve `[{"tag","count"}]`. Al borrar un proyecto, sus notas se
+conservan y quedan sin proyecto. `/api/snapshot` incluye `notes`.
 
 Montos en centavos (`budget_cents`, `amount_cents`), fechas `YYYY-MM-DD`. Errores: `{"code","error"}` con
 404 `not_found`, 409 `client_has_projects` / `total_one_quote`, 422 `invalid_amount` / `bad_request`, 401 `unauthorized`.

@@ -19,7 +19,7 @@ J=$TMP/jar
 [ "$(code $U/)" = 303 ] || fail "sin login debe redirigir"
 [ "$(code -d password=mal $U/login)" = 401 ] || fail "login malo"
 [ "$(code -c $J -d password=pw $U/login)" = 303 ] || fail "login"
-for p in / /tasks /projects /projects/1 /clients /clients/1 /payments /tasks/new /projects/new /payments/new /clients/new /tasks/1/edit /static/app.css; do
+for p in / /tasks /projects /projects/1 /clients /clients/1 /payments /tasks/new /projects/new /payments/new /clients/new /tasks/1/edit /static/app.css /notes /notes/new '/notes?project_id=none&tag=idea&q=x'; do
   [ "$(code -b $J $U$p)" = 200 ] || fail "GET $p"
 done
 [ "$(code -b $J $U/projects/999)" = 404 ] || fail "404 proyecto"
@@ -36,4 +36,18 @@ curl -s -H 'Authorization: Bearer secreto' $U/api/payments/1 | grep -q '"paid_da
 curl -s -H 'Authorization: Bearer secreto' $U/api/payments/1 | grep -q '"paid_date":null' || fail "sigue pagada"
 LOC=$(curl -s -b $J -o /dev/null -w '%{redirect_url}' -d "_csrf=$CSRF&next=//evil.com" $U/tasks/1/toggle)
 case "$LOC" in *evil*) fail "open redirect: $LOC";; esac
+# Notas: crear con proyecto y etiquetas, verlas en el API, editar (sin proyecto) y borrar.
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" -d 'title=+&next=/notes' $U/notes)" = 422 ] || fail "nota sin título"
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" --data-urlencode 'title=Nota web zzw' --data-urlencode 'tags=Reunión, #Idea idea' -d 'project_id=1&body=uno%0D%0Ados&next=/notes' $U/notes)" = 303 ] || fail "crear nota"
+NOTE=$(curl -s -H 'Authorization: Bearer secreto' "$U/api/notes?search=zzw&tag=idea&project_id=1")
+echo "$NOTE" | grep -q '"tags":\["reunión","idea"\]' || fail "etiquetas de la nota: $NOTE"
+echo "$NOTE" | grep -q '"body":"uno\\ndos"' || fail "cuerpo de la nota: $NOTE"
+NID=$(echo "$NOTE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+for p in /notes "/notes/$NID/edit" /projects/1 '/notes?tag=idea'; do
+  [ "$(code -b $J $U$p)" = 200 ] || fail "GET $p"
+done
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" --data-urlencode 'title=Nota web zzw 2' -d 'project_id=&tags=&next=/notes' $U/notes/$NID)" = 303 ] || fail "editar nota"
+curl -s -H 'Authorization: Bearer secreto' "$U/api/notes?project_id=none&search=zzw" | grep -q '"project_id":null' || fail "la nota debió quedar sin proyecto"
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" -d 'next=/notes' $U/notes/$NID/delete)" = 303 ] || fail "borrar nota"
+[ "$(code -H 'Authorization: Bearer secreto' $U/api/notes/$NID)" = 404 ] || fail "la nota sigue existiendo"
 echo "OK"

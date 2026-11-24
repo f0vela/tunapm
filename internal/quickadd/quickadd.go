@@ -16,6 +16,7 @@ const (
 	KindClient  Kind = "c"
 	KindProject Kind = "p"
 	KindPayment Kind = "$"
+	KindNote    Kind = "n"
 )
 
 var (
@@ -36,6 +37,7 @@ type Draft struct {
 	Title       string
 	Target      string
 	Company     string
+	Tags        string // etiquetas de una nota, separadas por espacio
 	AmountCents int64
 	Currency    string
 	Priority    int    // -1 si no se indicó
@@ -48,6 +50,7 @@ type Draft struct {
 //	c Juan Pérez #Acme
 //	p Sitio web @Acme $5000 usd ^2026-12-20
 //	$ 2500 @web-acme ^15/12
+//	n Idea para el home @web-acme #idea #diseño
 func Parse(input string) (Draft, error) {
 	fields := strings.Fields(input)
 	if len(fields) == 0 {
@@ -56,7 +59,7 @@ func Parse(input string) (Draft, error) {
 
 	kind := Kind(fields[0])
 	switch kind {
-	case KindTask, KindClient, KindProject, KindPayment:
+	case KindTask, KindClient, KindProject, KindPayment, KindNote:
 	default:
 		return Draft{}, ErrNotQuickAdd
 	}
@@ -66,6 +69,14 @@ func Parse(input string) (Draft, error) {
 	var titleWords []string
 	for _, field := range fields[1:] {
 		switch {
+		case strings.HasPrefix(field, "#") && kind == KindNote:
+			// En una nota cada #palabra es una etiqueta.
+			if tag := strings.TrimLeft(field, "#"); tag != "" {
+				d.Tags = strings.TrimSpace(d.Tags + " " + tag)
+			}
+		case kind == KindNote && !strings.HasPrefix(field, "@"):
+			// El texto de una nota es libre: ^, ! o "usd" no son sintaxis aquí.
+			titleWords = append(titleWords, field)
 		case strings.HasPrefix(field, "^"):
 			if len(field) == 1 {
 				return Draft{}, fmt.Errorf("fecha vacía")

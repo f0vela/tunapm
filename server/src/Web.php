@@ -129,6 +129,16 @@ final class Web
             ['POST', '/clients/(\d+)', fn (int $id) => $this->clientSave($id)],
             ['POST', '/clients/(\d+)/delete', fn (int $id) => $this->clientDelete($id)],
 
+            ['GET', '/notes', fn () => $this->notesList()],
+            ['GET', '/notes/new', fn () => $this->noteForm([
+                'project_id' => (int) ($_GET['project_id'] ?? 0) ?: null,
+                'tags' => Repo::normalizeTags((string) ($_GET['tag'] ?? '')),
+            ])],
+            ['POST', '/notes', fn () => $this->noteSave(0)],
+            ['GET', '/notes/(\d+)/edit', fn (int $id) => $this->noteForm($this->repo->getNote($id))],
+            ['POST', '/notes/(\d+)', fn (int $id) => $this->noteSave($id)],
+            ['POST', '/notes/(\d+)/delete', function (int $id) { $this->repo->deleteNote($id); self::back('/notes', 'Nota eliminada'); }],
+
             ['GET', '/payments', fn () => View::render('payments', ['payments' => $this->repo->listPayments()], 'cuotas', 'Cuotas')],
             ['GET', '/payments/new', fn () => $this->paymentForm(['project_id' => (int) ($_GET['project_id'] ?? 0), 'scheduled_date' => date('Y-m-d')])],
             ['POST', '/payments', fn () => $this->paymentSave(0)],
@@ -229,6 +239,7 @@ final class Web
             'tasks' => $this->repo->listTasks(['mode' => 'todas', 'project_id' => $id]),
             'payments' => $this->repo->paymentsByProject($id),
             'totals' => $this->repo->projectTotals($id),
+            'notes' => $this->repo->listNotes(['project_id' => $id]),
         ], 'proyectos', $p['name']);
     }
 
@@ -328,5 +339,44 @@ final class Web
             return;
         }
         self::back('/payments', 'Cuota guardada');
+    }
+
+    // ---------- notes ----------
+
+    private function notesList(): void
+    {
+        $q = (string) ($_GET['q'] ?? '');
+        $tag = Repo::normalizeTag((string) ($_GET['tag'] ?? ''));
+        $project = (string) ($_GET['project_id'] ?? '');
+        $project = $project === 'none' ? 'none' : ((int) $project > 0 ? (string) (int) $project : '');
+        View::render('notes', [
+            'notes' => $this->repo->listNotes([
+                'search' => $q, 'tag' => $tag, 'unassigned' => $project === 'none', 'project_id' => (int) $project,
+            ]),
+            'tags' => $this->repo->noteTags(), 'projects' => $this->repo->listProjects(),
+            'q' => $q, 'tag' => $tag, 'project' => $project,
+        ], 'notas', 'Notas');
+    }
+
+    private function noteForm(array $n, string $error = '', int $status = 200): void
+    {
+        View::render('note_form', ['n' => $n, 'projects' => $this->repo->listProjects(), 'tags' => $this->repo->noteTags(), 'next' => self::next()],
+            'notas', isset($n['id']) ? 'Editar nota' : 'Nueva nota', $status, $error);
+    }
+
+    private function noteSave(int $id): void
+    {
+        $n = [
+            'project_id' => (int) ($_POST['project_id'] ?? 0) ?: null, 'title' => self::post('title'),
+            'body' => str_replace("\r\n", "\n", self::post('body')), 'tags' => Repo::normalizeTags(self::post('tags')),
+        ];
+        $id && $n['id'] = $id;
+        try {
+            $id ? $this->repo->updateNote($id, $n) : $this->repo->createNote($n);
+        } catch (AppError $e) {
+            $this->noteForm($n, $e->getMessage() === 'title es obligatorio' ? 'El título es obligatorio' : $e->getMessage(), 422);
+            return;
+        }
+        self::back('/notes', 'Nota guardada');
     }
 }

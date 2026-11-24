@@ -21,6 +21,7 @@ type Projects struct {
 	payments      []store.Payment
 	totals        store.ProjectTotals
 	allTotals     map[int64]store.ProjectTotals
+	noteCounts    map[int64]int
 }
 
 func newProjects(st store.Repo) *Projects {
@@ -40,6 +41,14 @@ func (p *Projects) reload() {
 	p.projects = projects
 	p.progress, _ = p.st.TaskProgress()
 	p.allTotals, _ = p.st.AllProjectTotals()
+	p.noteCounts = map[int64]int{}
+	if notes, err := p.st.ListNotes(store.NoteFilter{}); err == nil {
+		for _, n := range notes {
+			if n.ProjectID != nil {
+				p.noteCounts[*n.ProjectID]++
+			}
+		}
+	}
 	if p.selectedID == 0 && len(projects) > 0 {
 		p.selectedID = projects[0].ID
 	}
@@ -224,6 +233,7 @@ func (p *Projects) detailView(width, height int) string {
 		field("Fechas", humanOrDash(proj.StartDate, today)+mutedStyle.Render(" → ")+humanOrDash(proj.DueDate, today)),
 		field("Presupuesto", money.Format(proj.BudgetCents, cur)+mutedStyle.Render("  "+billing)),
 		field("Tareas", taskSummary(prog)),
+		field("Notas", noteSummary(p.noteCounts[proj.ID])),
 		"",
 		sectionStyle.Render("Cobro"),
 		field("Cobrado", successStyle.Render(money.Format(p.totals.PaidCents, cur))+"  "+
@@ -259,6 +269,13 @@ func (p *Projects) detailView(width, height int) string {
 		lines = append(lines, "", sectionStyle.Render("Descripción"), wrapLine(proj.Description, width))
 	}
 	return clipLines(lines, width, height)
+}
+
+func noteSummary(count int) string {
+	if count == 0 {
+		return mutedStyle.Render("sin notas  o las abre")
+	}
+	return plural(count, "nota", "notas") + mutedStyle.Render("  o las abre")
 }
 
 func taskSummary(prog store.TaskProgress) string {
@@ -336,6 +353,11 @@ func (p *Projects) handleKey(a *App, msg tea.KeyMsg) {
 			}
 		}
 		a.toastf("No hay cuotas pendientes en %s", proj.Name)
+	case "o":
+		if proj != nil {
+			a.notes.showProject(*proj)
+			a.setTab(tabNotes)
+		}
 	case "enter":
 		if proj == nil {
 			return

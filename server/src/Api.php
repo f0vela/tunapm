@@ -89,6 +89,19 @@ final class Api
             ['PUT', "/api/tasks/$id", fn (int $i) => $ok($r->updateTask($i, self::body()))],
             ['DELETE', "/api/tasks/$id", function (int $i) use ($r, $none) { $r->deleteTask($i); $none(); }],
 
+            ['GET', '/api/notes', fn () => $ok($r->listNotes([
+                // project_id=none pide las notas sin proyecto.
+                'unassigned' => ($_GET['project_id'] ?? '') === 'none',
+                'project_id' => (int) ($_GET['project_id'] ?? 0),
+                'tag' => (string) ($_GET['tag'] ?? ''),
+                'search' => (string) ($_GET['search'] ?? ''),
+            ]))],
+            ['GET', '/api/notes/tags', fn () => $ok($r->noteTags())],
+            ['POST', '/api/notes', fn () => $created($r->createNote(self::body()))],
+            ['GET', "/api/notes/$id", fn (int $i) => $ok($r->getNote($i))],
+            ['PUT', "/api/notes/$id", fn (int $i) => $ok($r->updateNote($i, self::body()))],
+            ['DELETE', "/api/notes/$id", function (int $i) use ($r, $none) { $r->deleteNote($i); $none(); }],
+
             ['GET', '/api/payments', fn () => $ok($r->listPayments())],
             ['POST', '/api/payments', fn () => $created($r->createPayment(self::body()))],
             ['GET', "/api/payments/$id", fn (int $i) => $ok($r->getPayment($i))],

@@ -14,5 +14,9 @@
   <div class="sec-head"><h2>Cuotas</h2><a class="btn small" href="/payments/new?project_id=<?= $p['id'] ?>&next=/projects/<?= $p['id'] ?>">+ Cuota</a></div>
   <?= View::partial('_payment_rows', ['items' => $payments, 'today' => $today, 'url' => $url, 'csrf' => $csrf]) ?>
 </section>
+<section>
+  <div class="sec-head"><h2>Notas</h2><a class="btn small" href="/notes/new?project_id=<?= $p['id'] ?>&next=/projects/<?= $p['id'] ?>">+ Nota</a></div>
+  <?= View::partial('_note_rows', ['items' => $notes, 'today' => $today, 'url' => $url, 'csrf' => $csrf]) ?>
+</section>
 <form method="post" action="/projects/<?= $p['id'] ?>/delete" onsubmit="return confirm('¿Eliminar proyecto con sus tareas y cuotas?')">
   <?= csrf_field($csrf) ?><button class="btn danger" type="submit">Eliminar proyecto</button></form>

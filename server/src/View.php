@@ -55,6 +55,23 @@ function human(?string $date, string $today): string
     return $t->format('Y') === $b->format('Y') ? $t->format('d/m') : $date;
 }
 
+/** Marca de tiempo UTC (RFC 3339) → fecha local YYYY-MM-DD, según la zona horaria de PHP. */
+function localDate(string $stamp): string
+{
+    $t = date_create_immutable($stamp);
+    return $t ? $t->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('Y-m-d') : substr($stamp, 0, 10);
+}
+
+/** Resume el texto de una nota en una línea para las listas. */
+function excerpt(string $body): string
+{
+    $line = implode(' ', preg_split('/\s+/u', $body, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+    if (function_exists('mb_strlen')) {
+        return mb_strlen($line, 'UTF-8') > 140 ? mb_substr($line, 0, 140, 'UTF-8') . '…' : $line;
+    }
+    return strlen($line) > 140 ? substr($line, 0, 140) . '…' : $line;
+}
+
 function pct(int $done, int $total): int { return $total === 0 ? 0 : intdiv($done * 100, $total); }
 function prio(int $p): string { return ['baja', 'normal', 'alta', 'urgente'][max(0, min(3, $p))]; }
 function statusLabel(string $s): string { return str_replace('_', ' ', $s); }

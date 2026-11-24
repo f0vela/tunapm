@@ -5,7 +5,7 @@ namespace Tuna;
 
 final class Db
 {
-    /** Abre (o crea) la base y aplica la migración inicial. */
+    /** Abre (o crea) la base y aplica las migraciones pendientes. */
     public static function open(string $path, string $journalMode = 'DELETE'): \PDO
     {
         if ($path !== ':memory:' && !is_dir(dirname($path))) {
@@ -26,20 +26,25 @@ final class Db
         return $pdo;
     }
 
+    /** Migraciones en orden; cada una se aplica una sola vez y sube user_version. */
+    private const MIGRATIONS = ['001_init.sql', '002_notes.sql'];
+
     private static function migrate(\PDO $pdo): void
     {
         $version = (int) $pdo->query('PRAGMA user_version')->fetchColumn();
-        if ($version >= 1) {
-            return;
-        }
-        $pdo->exec('BEGIN IMMEDIATE');
-        try {
-            $pdo->exec((string) file_get_contents(__DIR__ . '/001_init.sql'));
-            $pdo->exec('PRAGMA user_version = 1');
-            $pdo->exec('COMMIT');
-        } catch (\Throwable $e) {
-            $pdo->exec('ROLLBACK');
-            throw $e;
+        foreach (self::MIGRATIONS as $i => $file) {
+            if ($version > $i) {
+                continue;
+            }
+            $pdo->exec('BEGIN IMMEDIATE');
+            try {
+                $pdo->exec((string) file_get_contents(__DIR__ . '/' . $file));
+                $pdo->exec('PRAGMA user_version = ' . ($i + 1));
+                $pdo->exec('COMMIT');
+            } catch (\Throwable $e) {
+                $pdo->exec('ROLLBACK');
+                throw $e;
+            }
         }
     }
 }
