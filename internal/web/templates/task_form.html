@@ -6,7 +6,7 @@
   <label>Título<input name="title" value="{{$t.Title}}" required autofocus></label>
   <label>Proyecto
     <select name="project_id" required>
-      <option value="">—</option>
+      <option value="">Elegir…</option>
       {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $t.ProjectID}}selected{{end}}>{{.ClientName}} · {{.Name}}</option>{{end}}
     </select></label>
   <div class="two">

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"tunapm/internal/dates"
@@ -95,6 +96,24 @@ var funcs = template.FuncMap{
 	"payStatus":   func(p store.Payment, today string) string { return p.StatusToday(today) },
 	"list":        func(v ...string) []string { return v },
 	"ctx":         func(items any, today, url string) listCtx { return listCtx{items, today, url} },
+	"asset":       asset,
+}
+
+var assetVersions sync.Map
+
+// asset devuelve la URL de un estático con la huella de su contenido, para que
+// el navegador (sobre todo Safari en iOS) no siga usando una copia vieja.
+func asset(name string) string {
+	if v, ok := assetVersions.Load(name); ok {
+		return v.(string)
+	}
+	url := "/static/" + name
+	if data, err := staticFS.ReadFile("static/" + name); err == nil {
+		sum := sha256.Sum256(data)
+		url += "?v=" + hex.EncodeToString(sum[:4])
+	}
+	assetVersions.Store(name, url)
+	return url
 }
 
 func (s *Server) loadTemplates() error {
@@ -157,7 +176,16 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name, nav, title
 func (s *Server) routes() {
 	m := s.mux
 	static, _ := fs.Sub(staticFS, "static")
-	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	files := http.StripPrefix("/static/", http.FileServerFS(static))
+	m.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
+		// Con huella (?v=) el archivo nunca cambia; sin ella se revalida siempre.
+		if r.URL.Query().Has("v") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		files.ServeHTTP(w, r)
+	})
 	m.HandleFunc("GET /login", s.loginForm)
 	m.HandleFunc("POST /login", s.loginSubmit)
 	m.HandleFunc("POST /logout", s.logout)

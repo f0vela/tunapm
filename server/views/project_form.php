@@ -5,7 +5,7 @@
   <label>Nombre<input name="name" value="<?= e($p['name'] ?? '') ?>" required autofocus></label>
   <label>Cliente
     <select name="client_id" required>
-      <option value="">—</option>
+      <option value="">Elegir…</option>
       <?php foreach ($clients as $c): ?><option value="<?= $c['id'] ?>"<?= selected($c['id'] === (int) ($p['client_id'] ?? 0)) ?>><?= e($c['name'] . ($c['company'] ? " ({$c['company']})" : '')) ?></option><?php endforeach ?>
     </select></label>
   <label>Descripción<textarea name="description" rows="3"><?= e($p['description'] ?? '') ?></textarea></label>

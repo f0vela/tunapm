@@ -5,7 +5,7 @@
   <label>Título<input name="title" value="<?= e($t['title'] ?? '') ?>" required autofocus></label>
   <label>Proyecto
     <select name="project_id" required>
-      <option value="">—</option>
+      <option value="">Elegir…</option>
       <?php foreach ($projects as $p): ?><option value="<?= $p['id'] ?>"<?= selected($p['id'] === (int) ($t['project_id'] ?? 0)) ?>><?= e($p['client_name'] . ' · ' . $p['name']) ?></option><?php endforeach ?>
     </select></label>
   <div class="two">

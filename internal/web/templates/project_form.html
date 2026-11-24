@@ -5,7 +5,7 @@
   <label>Nombre<input name="name" value="{{$p.Name}}" required autofocus></label>
   <label>Cliente
     <select name="client_id" required>
-      <option value="">—</option>
+      <option value="">Elegir…</option>
       {{range .Data.Clients}}<option value="{{.ID}}" {{if eq .ID $p.ClientID}}selected{{end}}>{{.Name}}{{if .Company}} ({{.Company}}){{end}}</option>{{end}}
     </select></label>
   <label>Descripción<textarea name="description" rows="3">{{$p.Description}}</textarea></label>

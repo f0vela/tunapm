@@ -67,6 +67,13 @@ function paymentStatus(array $p, string $today): string
     return $p['scheduled_date'] < $today ? 'vencido' : 'pendiente';
 }
 
+/** URL de un estático con su fecha de modificación, para invalidar la caché del navegador al actualizar. */
+function asset(string $name): string
+{
+    $mtime = @filemtime(__DIR__ . '/../public/static/' . $name);
+    return '/static/' . $name . ($mtime ? '?v=' . $mtime : '');
+}
+
 final class View
 {
     public static string $csrf = '';

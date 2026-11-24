@@ -4,7 +4,7 @@
   <?= csrf_field($csrf) ?><input type="hidden" name="next" value="<?= e($next) ?>">
   <label>Proyecto
     <select name="project_id" required>
-      <option value="">—</option>
+      <option value="">Elegir…</option>
       <?php foreach ($projects as $pr): ?><option value="<?= $pr['id'] ?>"<?= selected($pr['id'] === (int) ($p['project_id'] ?? 0)) ?>><?= e($pr['client_name'] . ' · ' . $pr['name'] . ' (' . $pr['currency'] . ')') ?></option><?php endforeach ?>
     </select></label>
   <label>Monto<input name="amount" inputmode="decimal" value="<?= e(amount((int) ($p['amount_cents'] ?? 0))) ?>" required placeholder="2500"></label>
