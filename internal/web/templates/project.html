@@ -1,0 +1,22 @@
+{{define "project"}}
+{{$p := .Data.Project}}
+<div class="sec-head"><h1>{{$p.Name}}</h1><a class="btn small" href="/projects/{{$p.ID}}/edit">Editar</a></div>
+<div class="card">
+  <p><a href="/clients/{{$p.ClientID}}">{{$p.ClientName}}</a> · <span class="pill">{{statusLabel $p.Status}}</span></p>
+  {{if $p.Description}}<p>{{$p.Description}}</p>{{end}}
+  <p><small>Presupuesto {{money $p.BudgetCents $p.Currency}} · cobro {{$p.BillingType}}
+  {{if $p.DueDate}} · entrega {{human $p.DueDate $.Today}}{{end}}</small></p>
+  <p><small>Programado {{money .Data.Totals.ScheduledCents $p.Currency}} · pagado {{money .Data.Totals.PaidCents $p.Currency}}</small></p>
+</div>
+
+<section>
+  <div class="sec-head"><h2>Tareas</h2><a class="btn small" href="/tasks/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Tarea</a></div>
+  {{template "task_rows" ctx .Data.Tasks .Today .URL}}
+</section>
+<section>
+  <div class="sec-head"><h2>Cuotas</h2><a class="btn small" href="/payments/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Cuota</a></div>
+  {{template "payment_rows" ctx .Data.Payments .Today .URL}}
+</section>
+<form method="post" action="/projects/{{$p.ID}}/delete" onsubmit="return confirm('¿Eliminar proyecto con sus tareas y cuotas?')">
+  <button class="btn danger" type="submit">Eliminar proyecto</button></form>
+{{end}}

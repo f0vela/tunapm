@@ -1,0 +1,37 @@
+{{define "project_form"}}
+{{$p := .Data.Project}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $p.ID}}/projects/{{$p.ID}}{{else}}/projects{{end}}" class="card form">
+  <label>Nombre<input name="name" value="{{$p.Name}}" required autofocus></label>
+  <label>Cliente
+    <select name="client_id" required>
+      <option value="">—</option>
+      {{range .Data.Clients}}<option value="{{.ID}}" {{if eq .ID $p.ClientID}}selected{{end}}>{{.Name}}{{if .Company}} ({{.Company}}){{end}}</option>{{end}}
+    </select></label>
+  <label>Descripción<textarea name="description" rows="3">{{$p.Description}}</textarea></label>
+  <div class="two">
+    <label>Estado
+      <select name="status">
+        {{range $s := list "prospecto" "activo" "pausado" "completado" "cancelado"}}<option value="{{$s}}" {{if eq $s $p.Status}}selected{{end}}>{{$s}}</option>{{end}}
+      </select></label>
+    <label>Cobro
+      <select name="billing_type">
+        <option value="total" {{if eq $p.BillingType "total"}}selected{{end}}>total (1 cuota)</option>
+        <option value="parcial" {{if eq $p.BillingType "parcial"}}selected{{end}}>parcial</option>
+      </select></label>
+  </div>
+  <div class="two">
+    <label>Presupuesto<input name="budget" inputmode="decimal" value="{{amount $p.BudgetCents}}" placeholder="5000"></label>
+    <label>Moneda
+      <select name="currency">
+        <option value="GTQ" {{if eq $p.Currency "GTQ"}}selected{{end}}>Q (GTQ)</option>
+        <option value="USD" {{if eq $p.Currency "USD"}}selected{{end}}>$ (USD)</option>
+      </select></label>
+  </div>
+  <div class="two">
+    <label>Inicio<input type="date" name="start_date" value="{{deref $p.StartDate}}"></label>
+    <label>Entrega<input type="date" name="due_date" value="{{deref $p.DueDate}}"></label>
+  </div>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{end}}

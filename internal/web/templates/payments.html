@@ -1,0 +1,4 @@
+{{define "payments"}}
+<div class="sec-head"><h1>Cuotas</h1><a class="btn small primary" href="/payments/new?next=/payments">+ Nueva</a></div>
+{{template "payment_rows" ctx .Data .Today .URL}}
+{{end}}

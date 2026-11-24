@@ -1,0 +1,17 @@
+{{define "client"}}
+{{$c := .Data.Client}}
+<div class="sec-head"><h1>{{$c.Name}}</h1><a class="btn small" href="/clients/{{$c.ID}}/edit">Editar</a></div>
+<div class="card">
+  {{if $c.Company}}<p><strong>{{$c.Company}}</strong></p>{{end}}
+  {{if $c.Email}}<p><a href="mailto:{{$c.Email}}">{{$c.Email}}</a></p>{{end}}
+  {{if $c.Phone}}<p><a href="tel:{{$c.Phone}}">{{$c.Phone}}</a></p>{{end}}
+  {{if $c.Notes}}<p>{{$c.Notes}}</p>{{end}}
+</div>
+<section>
+  <div class="sec-head"><h2>Proyectos</h2><a class="btn small" href="/projects/new?client_id={{$c.ID}}">+ Proyecto</a></div>
+  {{if not .Data.Projects}}<p class="empty">Sin proyectos.</p>{{end}}
+  <ul class="rows">{{range .Data.Projects}}<li class="row"><a class="grow" href="/projects/{{.ID}}"><strong>{{.Name}}</strong><small>{{statusLabel .Status}} · {{money .BudgetCents .Currency}}</small></a></li>{{end}}</ul>
+</section>
+<form method="post" action="/clients/{{$c.ID}}/delete" onsubmit="return confirm('¿Eliminar cliente?')">
+  <button class="btn danger" type="submit">Eliminar cliente</button></form>
+{{end}}

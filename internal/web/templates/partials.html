@@ -1,0 +1,40 @@
+{{define "task_rows"}}
+{{if not .Items}}<p class="empty">Sin tareas.</p>{{end}}
+<ul class="rows">
+{{range .Items}}
+<li class="row {{if eq .Status "hecho"}}done{{end}}">
+  <form method="post" action="/tasks/{{.ID}}/toggle"><input type="hidden" name="next" value="{{$.URL}}">
+    <button class="check" type="submit" aria-label="Completar">{{if eq .Status "hecho"}}✓{{end}}</button></form>
+  <a class="grow" href="/tasks/{{.ID}}/edit?next={{$.URL}}">
+    <strong>{{.Title}}</strong>
+    <small>{{.ClientName}} · {{.ProjectName}}{{if .DueDate}} · <span class="{{if and (lt (deref .DueDate) $.Today) (ne .Status "hecho")}}late{{end}}">{{human .DueDate $.Today}}</span>{{end}}</small>
+  </a>
+  {{if ge .Priority 2}}<span class="pill p{{.Priority}}">{{prio .Priority}}</span>{{end}}
+  {{if eq .Status "en_curso"}}<span class="pill">en curso</span>{{end}}
+</li>
+{{end}}
+</ul>
+{{end}}
+
+{{define "payment_rows"}}
+{{if not .Items}}<p class="empty">Sin cuotas.</p>{{end}}
+<ul class="rows">
+{{range .Items}}
+{{$st := payStatus . $.Today}}
+<li class="row">
+  <a class="grow" href="/payments/{{.ID}}/edit?next={{$.URL}}">
+    <strong>{{money .AmountCents .Currency}}</strong>
+    <small>{{.ClientName}} · {{.ProjectName}} · {{humanS .ScheduledDate $.Today}}</small>
+  </a>
+  {{if eq $st "pagado"}}<span class="pill ok">pagada</span>
+    <form method="post" action="/payments/{{.ID}}/unpay" onsubmit="return confirm('¿Marcar como NO pagada?')"><input type="hidden" name="next" value="{{$.URL}}">
+      <button class="btn small" type="submit">Deshacer</button></form>
+  {{else}}
+    {{if eq $st "vencido"}}<span class="pill p3">vencida</span>{{end}}
+    <form method="post" action="/payments/{{.ID}}/pay"><input type="hidden" name="next" value="{{$.URL}}">
+      <button class="btn small" type="submit">Pagada</button></form>
+  {{end}}
+</li>
+{{end}}
+</ul>
+{{end}}

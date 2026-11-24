@@ -1,0 +1,18 @@
+{{define "tasks"}}
+<div class="sec-head"><h1>Tareas</h1><a class="btn small primary" href="/tasks/new?{{if .Data.Project}}project_id={{.Data.Project}}&{{end}}next=/tasks">+ Nueva</a></div>
+<form method="get" class="filters">
+  <input type="search" name="q" value="{{.Data.Q}}" placeholder="Buscar…">
+  <select name="mode" onchange="this.form.submit()">
+    <option value="abiertas" {{if eq .Data.Mode "abiertas"}}selected{{end}}>Abiertas</option>
+    <option value="hechas" {{if eq .Data.Mode "hechas"}}selected{{end}}>Hechas</option>
+    <option value="todas" {{if eq .Data.Mode "todas"}}selected{{end}}>Todas</option>
+  </select>
+  <select name="project_id" onchange="this.form.submit()">
+    <option value="">Todos los proyectos</option>
+    {{$sel := .Data.Project}}
+    {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $sel}}selected{{end}}>{{.Name}}</option>{{end}}
+  </select>
+  <button class="btn small" type="submit">Filtrar</button>
+</form>
+{{template "task_rows" ctx .Data.Tasks .Today .URL}}
+{{end}}

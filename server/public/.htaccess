@@ -1,0 +1,11 @@
+# Todo pasa por index.php (excepto archivos estáticos reales).
+RewriteEngine On
+
+# Apache/FastCGI suele quitar el header Authorization: lo pasamos explícitamente.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]
+
+Options -Indexes

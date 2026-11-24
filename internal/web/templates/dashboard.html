@@ -1,0 +1,16 @@
+{{define "dashboard"}}
+<h1>Inicio</h1>
+{{if .Data.Overdue}}<a class="alert" href="/payments">{{.Data.Overdue}} cuota(s) vencida(s)</a>{{end}}
+
+<section>
+  <div class="sec-head"><h2>Tareas abiertas</h2><a class="btn small" href="/tasks/new?next=/">+ Tarea</a></div>
+  {{template "task_rows" ctx .Data.Tasks .Today .URL}}
+  <a class="more" href="/tasks">Ver todas →</a>
+</section>
+
+<section>
+  <div class="sec-head"><h2>Próximas cuotas</h2></div>
+  {{template "payment_rows" ctx .Data.Payments .Today .URL}}
+  <a class="more" href="/payments">Ver todas →</a>
+</section>
+{{end}}

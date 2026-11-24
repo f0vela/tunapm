@@ -1,0 +1,35 @@
+{{define "task_form"}}
+{{$t := .Data.Task}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $t.ID}}/tasks/{{$t.ID}}{{else}}/tasks{{end}}" class="card form">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <label>Título<input name="title" value="{{$t.Title}}" required autofocus></label>
+  <label>Proyecto
+    <select name="project_id" required>
+      <option value="">—</option>
+      {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $t.ProjectID}}selected{{end}}>{{.ClientName}} · {{.Name}}</option>{{end}}
+    </select></label>
+  <div class="two">
+    <label>Estado
+      <select name="status">
+        <option value="pendiente" {{if eq $t.Status "pendiente"}}selected{{end}}>pendiente</option>
+        <option value="en_curso" {{if eq $t.Status "en_curso"}}selected{{end}}>en curso</option>
+        <option value="hecho" {{if eq $t.Status "hecho"}}selected{{end}}>hecho</option>
+      </select></label>
+    <label>Prioridad
+      <select name="priority">
+        <option value="0" {{if eq $t.Priority 0}}selected{{end}}>baja</option>
+        <option value="1" {{if eq $t.Priority 1}}selected{{end}}>normal</option>
+        <option value="2" {{if eq $t.Priority 2}}selected{{end}}>alta</option>
+        <option value="3" {{if eq $t.Priority 3}}selected{{end}}>urgente</option>
+      </select></label>
+  </div>
+  <label>Fecha límite<input type="date" name="due_date" value="{{deref $t.DueDate}}"></label>
+  <label>Notas<textarea name="notes" rows="4">{{$t.Notes}}</textarea></label>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{if $t.ID}}
+<form method="post" action="/tasks/{{$t.ID}}/delete" onsubmit="return confirm('¿Eliminar tarea?')">
+  <input type="hidden" name="next" value="{{.Data.Next}}"><button class="btn danger" type="submit">Eliminar</button></form>
+{{end}}
+{{end}}

@@ -1,0 +1,34 @@
+{{define "layout"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>{{.Title}} · Tuna</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon.svg">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">🐟 Tuna</a>
+  {{if .Auth}}{{if ne .Nav ""}}<form method="post" action="/logout"><button class="link" type="submit">Salir</button></form>{{end}}{{end}}
+</header>
+<main>
+  {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+  {{.Content}}
+</main>
+{{if ne .Nav ""}}
+<nav class="tabs">
+  <a href="/" {{if eq .Nav "inicio"}}class="on"{{end}}><span>⌂</span>Inicio</a>
+  <a href="/tasks" {{if eq .Nav "tareas"}}class="on"{{end}}><span>✓</span>Tareas</a>
+  <a href="/projects" {{if eq .Nav "proyectos"}}class="on"{{end}}><span>▤</span>Proyectos</a>
+  <a href="/payments" {{if eq .Nav "cuotas"}}class="on"{{end}}><span>$</span>Cuotas</a>
+  <a href="/clients" {{if eq .Nav "clientes"}}class="on"{{end}}><span>☺</span>Clientes</a>
+</nav>
+{{end}}
+</body>
+</html>{{end}}

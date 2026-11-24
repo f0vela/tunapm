@@ -1,0 +1,12 @@
+{{define "client_form"}}
+{{$c := .Data}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $c.ID}}/clients/{{$c.ID}}{{else}}/clients{{end}}" class="card form">
+  <label>Nombre<input name="name" value="{{$c.Name}}" required autofocus></label>
+  <label>Empresa<input name="company" value="{{$c.Company}}"></label>
+  <label>Correo<input type="email" name="email" value="{{$c.Email}}"></label>
+  <label>Teléfono<input type="tel" name="phone" value="{{$c.Phone}}"></label>
+  <label>Notas<textarea name="notes" rows="4">{{$c.Notes}}</textarea></label>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{end}}

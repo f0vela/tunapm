@@ -1,0 +1,24 @@
+{{define "payment_form"}}
+{{$p := .Data.Payment}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $p.ID}}/payments/{{$p.ID}}{{else}}/payments{{end}}" class="card form">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <label>Proyecto
+    <select name="project_id" required>
+      <option value="">—</option>
+      {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $p.ProjectID}}selected{{end}}>{{.ClientName}} · {{.Name}} ({{.Currency}})</option>{{end}}
+    </select></label>
+  <label>Monto<input name="amount" inputmode="decimal" value="{{amount $p.AmountCents}}" required placeholder="2500"></label>
+  <div class="two">
+    <label>Fecha programada<input type="date" name="scheduled_date" value="{{$p.ScheduledDate}}" required></label>
+    <label>Fecha de pago<input type="date" name="paid_date" value="{{deref $p.PaidDate}}"></label>
+  </div>
+  <label>Notas<textarea name="notes" rows="3">{{$p.Notes}}</textarea></label>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{if $p.ID}}
+<form method="post" action="/payments/{{$p.ID}}/delete" onsubmit="return confirm('¿Eliminar cuota?')">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <button class="btn danger" type="submit">Eliminar</button></form>
+{{end}}
+{{end}}

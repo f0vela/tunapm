@@ -1,0 +1,2 @@
+# Defensa en profundidad: la base no debe quedar nunca bajo el web root.
+Require all denied

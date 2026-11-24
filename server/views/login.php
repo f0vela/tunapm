@@ -1,0 +1,6 @@
+<?php namespace Tuna; ?>
+<form method="post" action="/login" class="card form login">
+  <h1>Entrar</h1>
+  <label>Contraseña<input type="password" name="password" autofocus autocomplete="current-password" required></label>
+  <button class="btn primary" type="submit">Entrar</button>
+</form>
