@@ -54,3 +54,33 @@
 {{end}}
 </ul>
 {{end}}
+
+{{define "agenda_rows"}}
+<ul class="rows">
+{{range .Items}}
+<li class="row agenda {{itemClass .}}">
+  <span class="when">{{if .Time}}{{.Time}}{{end}}</span>
+  <a class="grow" href="{{itemURL . $.URL}}">
+    <strong>{{.Text}}</strong>
+    {{if .Detail}}<small>{{.Detail}}</small>{{end}}
+  </a>
+  <span class="pill {{itemClass .}}">{{.Label}}{{if .Overdue}} · vencido{{end}}</span>
+</li>
+{{end}}
+</ul>
+{{end}}
+
+{{define "agenda_dated"}}
+<ul class="rows">
+{{range .Items}}
+<li class="row agenda {{itemClass .}}">
+  <span class="when">{{humanS .Date $.Today}}{{if .Time}}<br>{{.Time}}{{end}}</span>
+  <a class="grow" href="{{itemURL . $.URL}}">
+    <strong>{{.Text}}</strong>
+    {{if .Detail}}<small>{{.Detail}}</small>{{end}}
+  </a>
+  <span class="pill {{itemClass .}}">{{.Label}}{{if .Overdue}} · vencido{{end}}</span>
+</li>
+{{end}}
+</ul>
+{{end}}

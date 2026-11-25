@@ -1,0 +1,35 @@
+{{define "event_form"}}
+{{$e := .Data.Event}}
+<h1>{{.Title}}</h1>
+<form method="post" action="{{if $e.ID}}/events/{{$e.ID}}{{else}}/events{{end}}" class="card form">
+  <input type="hidden" name="next" value="{{.Data.Next}}">
+  <label>Título<input name="title" value="{{$e.Title}}" required {{if not $e.ID}}autofocus{{end}} placeholder="Reunión de avance"></label>
+  <label>Tipo
+    <select name="kind">
+      {{range .Data.Kinds}}<option value="{{.}}" {{if eq . $e.Kind}}selected{{end}}>{{kindLabel .}}</option>{{end}}
+    </select></label>
+  <div class="two">
+    <label>Fecha<input type="date" name="date" value="{{$e.Date}}" required></label>
+    <label>Hora<input type="time" name="time" value="{{deref $e.Time}}">
+      <small>Vacía = todo el día.</small></label>
+  </div>
+  <label>Proyecto
+    <select name="project_id">
+      <option value="">Sin proyecto</option>
+      {{$pid := derefID $e.ProjectID}}
+      {{range .Data.Projects}}<option value="{{.ID}}" {{if eq .ID $pid}}selected{{end}}>{{.Name}} · {{.ClientName}}</option>{{end}}
+    </select></label>
+  <label>Cliente
+    <select name="client_id">
+      <option value="">Sin cliente (o el del proyecto)</option>
+      {{$cid := derefID $e.ClientID}}
+      {{range .Data.Clients}}<option value="{{.ID}}" {{if eq .ID $cid}}selected{{end}}>{{.Name}}{{if .Company}} · {{.Company}}{{end}}</option>{{end}}
+    </select></label>
+  <label>Notas<textarea name="notes" rows="4">{{$e.Notes}}</textarea></label>
+  <button class="btn primary" type="submit">Guardar</button>
+</form>
+{{if $e.ID}}
+<form method="post" action="/events/{{$e.ID}}/delete" onsubmit="return confirm('¿Eliminar evento?')">
+  <input type="hidden" name="next" value="{{.Data.Next}}"><button class="btn danger" type="submit">Eliminar evento</button></form>
+{{end}}
+{{end}}

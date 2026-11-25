@@ -129,6 +129,18 @@ final class Web
             ['POST', '/clients/(\d+)', fn (int $id) => $this->clientSave($id)],
             ['POST', '/clients/(\d+)/delete', fn (int $id) => $this->clientDelete($id)],
 
+            ['GET', '/calendar', fn () => $this->calendar()],
+            ['GET', '/events/new', fn () => $this->eventForm([
+                'kind' => 'reunion',
+                'date' => validDate((string) ($_GET['date'] ?? '')) ? (string) $_GET['date'] : date('Y-m-d'),
+                'project_id' => (int) ($_GET['project_id'] ?? 0) ?: null,
+                'client_id' => (int) ($_GET['client_id'] ?? 0) ?: null,
+            ])],
+            ['POST', '/events', fn () => $this->eventSave(0)],
+            ['GET', '/events/(\d+)/edit', fn (int $id) => $this->eventForm($this->repo->getEvent($id))],
+            ['POST', '/events/(\d+)', fn (int $id) => $this->eventSave($id)],
+            ['POST', '/events/(\d+)/delete', function (int $id) { $this->repo->deleteEvent($id); self::back('/calendar', 'Evento eliminado'); }],
+
             ['GET', '/notes', fn () => $this->notesList()],
             ['GET', '/notes/new', fn () => $this->noteForm([
                 'project_id' => (int) ($_GET['project_id'] ?? 0) ?: null,
@@ -240,6 +252,11 @@ final class Web
             'payments' => $this->repo->paymentsByProject($id),
             'totals' => $this->repo->projectTotals($id),
             'notes' => $this->repo->listNotes(['project_id' => $id]),
+            // En el proyecto solo se listan sus eventos: tareas y cuotas ya tienen su sección.
+            'agenda' => array_values(array_filter(
+                $this->repo->agenda(date('Y-m-d'), addDays(date('Y-m-d'), 365), date('Y-m-d')),
+                fn (array $it) => $it['type'] === 'event' && $it['project_id'] === $id
+            )),
         ], 'proyectos', $p['name']);
     }
 
@@ -378,5 +395,60 @@ final class Web
             return;
         }
         self::back('/notes', 'Nota guardada');
+    }
+
+    // ---------- calendario ----------
+
+    private function calendar(): void
+    {
+        $today = date('Y-m-d');
+        $view = (string) ($_GET['view'] ?? 'mes');
+        $date = validDate((string) ($_GET['date'] ?? '')) ? (string) $_GET['date'] : $today;
+        if ($view === 'semana') {
+            $week = weekDays($date);
+            [$from, $to, $title, $prev, $next] = [$week[0], $week[6], weekTitle($date), addDays($date, -7), addDays($date, 7)];
+        } elseif ($view === 'dia') {
+            [$from, $to, $title, $prev, $next] = [$date, $date, dayTitle($date) . ' ' . substr($date, 0, 4), addDays($date, -1), addDays($date, 1)];
+        } else {
+            $view = 'mes';
+            $grid = monthGrid($date);
+            [$from, $to, $title, $prev, $next] = [$grid[0][0], $grid[count($grid) - 1][6], monthTitle($date), addMonths($date, -1), addMonths($date, 1)];
+        }
+        $byDate = [];
+        foreach ($this->repo->agenda($from, $to, $today) as $it) {
+            $byDate[$it['date']][] = $it;
+        }
+        $day = fn (string $d) => [
+            'date' => $d, 'num' => (int) substr($d, 8, 2), 'title' => dayTitle($d), 'in_month' => substr($d, 0, 7) === substr($date, 0, 7),
+            'today' => $d === $today, 'selected' => $d === $date, 'items' => $byDate[$d] ?? [],
+        ];
+        $weeks = $view === 'mes' ? array_map(fn (array $w) => array_map($day, $w), monthGrid($date)) : [];
+        $days = $view === 'semana' ? array_map($day, weekDays($date)) : [$day($date)];
+        View::render('calendar', ['view' => $view, 'date' => $date, 'heading' => $title, 'prev' => $prev, 'nextDate' => $next,
+            'weeks' => $weeks, 'days' => $days], 'calendario', 'Calendario');
+    }
+
+    private function eventForm(array $ev, string $error = '', int $status = 200): void
+    {
+        View::render('event_form', ['ev' => $ev, 'projects' => $this->repo->listProjects(), 'clients' => $this->repo->listClients(), 'next' => self::next()],
+            'calendario', isset($ev['id']) ? 'Editar evento' : 'Nuevo evento', $status, $error);
+    }
+
+    private function eventSave(int $id): void
+    {
+        $ev = [
+            'title' => self::post('title'), 'kind' => self::post('kind'), 'date' => self::post('date'),
+            'time' => self::post('time') === '' ? null : self::post('time'),
+            'project_id' => (int) ($_POST['project_id'] ?? 0) ?: null, 'client_id' => (int) ($_POST['client_id'] ?? 0) ?: null,
+            'notes' => str_replace("\r\n", "\n", self::post('notes')),
+        ];
+        $id && $ev['id'] = $id;
+        try {
+            $saved = $id ? $this->repo->updateEvent($id, $ev) : $this->repo->createEvent($ev);
+        } catch (AppError $e) {
+            $this->eventForm($ev, $e->getMessage() === 'title es obligatorio' ? 'El título es obligatorio' : $e->getMessage(), 422);
+            return;
+        }
+        self::back('/calendar?view=dia&date=' . $saved['date'], 'Evento guardado');
     }
 }

@@ -18,6 +18,10 @@
   {{template "payment_rows" ctx .Data.Payments .Today .URL}}
 </section>
 <section>
+  <div class="sec-head"><h2>Calendario</h2><a class="btn small" href="/events/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Evento</a></div>
+  {{if .Data.Agenda}}{{template "agenda_dated" ctx .Data.Agenda .Today .URL}}{{else}}<p class="empty">Sin eventos próximos.</p>{{end}}
+</section>
+<section>
   <div class="sec-head"><h2>Notas</h2><a class="btn small" href="/notes/new?project_id={{$p.ID}}&next=/projects/{{$p.ID}}">+ Nota</a></div>
   {{template "note_rows" ctx .Data.Notes .Today .URL}}
 </section>

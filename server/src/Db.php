@@ -27,7 +27,7 @@ final class Db
     }
 
     /** Migraciones en orden; cada una se aplica una sola vez y sube user_version. */
-    private const MIGRATIONS = ['001_init.sql', '002_notes.sql'];
+    private const MIGRATIONS = ['001_init.sql', '002_notes.sql', '003_events.sql'];
 
     private static function migrate(\PDO $pdo): void
     {

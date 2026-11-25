@@ -15,11 +15,13 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
 	"tunapm/internal/money"
 	"tunapm/internal/store"
@@ -97,8 +99,43 @@ var funcs = template.FuncMap{
 	"list":        func(v ...string) []string { return v },
 	"ctx":         func(items any, today, url string) listCtx { return listCtx{items, today, url} },
 	"asset":       asset,
-	"join":        strings.Join,
-	"localDate":   store.LocalDate,
+	"kindLabel":   func(k string) string { return store.EventKindLabels[k] },
+	// itemClass da el color de una entrada del calendario según su tipo y estado.
+	"itemClass": func(it agenda.Item) string {
+		class := "t-" + it.Type
+		if it.Type == agenda.TypeProjectStart || it.Type == agenda.TypeProjectDue {
+			class = "t-project"
+		}
+		if it.Overdue {
+			class += " overdue"
+		}
+		if it.Done {
+			class += " done"
+		}
+		return class
+	},
+	// itemURL lleva cada entrada a donde se edita.
+	"itemURL": func(it agenda.Item, next string) string {
+		q := "?next=" + url.QueryEscape(next)
+		switch it.Type {
+		case agenda.TypeEvent:
+			return "/events/" + itoa(it.ID) + "/edit" + q
+		case agenda.TypeTask:
+			return "/tasks/" + itoa(it.ID) + "/edit" + q
+		case agenda.TypePayment:
+			return "/payments/" + itoa(it.ID) + "/edit" + q
+		}
+		return "/projects/" + itoa(it.ID)
+	},
+	"first": func(items []agenda.Item, n int) []agenda.Item {
+		if len(items) > n {
+			return items[:n]
+		}
+		return items
+	},
+	"extra":     func(items []agenda.Item, n int) int { return max(len(items)-n, 0) },
+	"join":      strings.Join,
+	"localDate": store.LocalDate,
 	"derefID": func(id *int64) int64 {
 		if id == nil {
 			return 0
@@ -232,6 +269,13 @@ func (s *Server) routes() {
 	g("GET /clients/{id}/edit", s.clientEdit)
 	g("POST /clients/{id}", s.clientSave)
 	g("POST /clients/{id}/delete", s.clientDelete)
+
+	g("GET /calendar", s.calendar)
+	g("GET /events/new", s.eventNew)
+	g("POST /events", s.eventSave)
+	g("GET /events/{id}/edit", s.eventEdit)
+	g("POST /events/{id}", s.eventSave)
+	g("POST /events/{id}/delete", s.eventDelete)
 
 	g("GET /notes", s.notesList)
 	g("GET /notes/new", s.noteNew)

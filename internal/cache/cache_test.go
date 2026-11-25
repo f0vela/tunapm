@@ -324,3 +324,48 @@ func TestOfflineNotesSyncWithRemappedProject(t *testing.T) {
 		t.Fatalf("espejo tras sincronizar: %+v", local)
 	}
 }
+
+func TestOfflineEventsSyncWithRemappedParents(t *testing.T) {
+	e := newEnv(t, true)
+	_ = e.repo.SyncNow()
+
+	c := store.Client{Name: "Ana"}
+	must(t, e.repo.CreateClient(&c))
+	p := store.Project{ClientID: c.ID, Name: "Web", Status: "activo", Currency: "GTQ", BillingType: store.BillingTotal}
+	must(t, e.repo.CreateProject(&p))
+	gone := store.Project{ClientID: c.ID, Name: "Se borra", Status: "activo", Currency: "GTQ", BillingType: store.BillingTotal}
+	must(t, e.repo.CreateProject(&gone))
+
+	clock := "10:00"
+	both := store.Event{Title: "Kickoff", Kind: store.EventReunion, Date: "2026-12-01", Time: &clock, ProjectID: &p.ID, ClientID: &c.ID}
+	must(t, e.repo.CreateEvent(&both))
+	orphan := store.Event{Title: "Queda suelto", Kind: store.EventOtro, Date: "2026-12-02", ProjectID: &gone.ID}
+	must(t, e.repo.CreateEvent(&orphan))
+	both.Title = "Kickoff editado"
+	must(t, e.repo.UpdateEvent(&both))
+	must(t, e.repo.DeleteProject(gone.ID))
+
+	e.down.Store(false)
+	settle(t, e, func() bool { return pending(e) == 0 })
+	if notices := e.repo.TakeNotices(); len(notices) != 0 {
+		t.Fatalf("no debería haber rechazos: %v", notices)
+	}
+
+	clients, _ := e.server.ListClients()
+	projects, _ := e.server.ListProjects()
+	events, _ := e.server.ListEvents("", "")
+	if len(clients) != 1 || len(projects) != 1 || len(events) != 2 {
+		t.Fatalf("servidor: %d clientes, %d proyectos, %d eventos", len(clients), len(projects), len(events))
+	}
+	k, o := events[0], events[1]
+	if k.Title != "Kickoff editado" || k.ProjectID == nil || *k.ProjectID != projects[0].ID || k.ClientID == nil || *k.ClientID != clients[0].ID || k.Time == nil {
+		t.Fatalf("evento mal remapeado: %+v", k)
+	}
+	if o.ProjectID != nil {
+		t.Fatalf("el evento del proyecto borrado debe quedar suelto: %+v", o)
+	}
+	local, _ := e.repo.ListEvents("2026-12-01", "2026-12-01")
+	if len(local) != 1 || local[0].ID != k.ID {
+		t.Fatalf("espejo tras sincronizar: %+v", local)
+	}
+}

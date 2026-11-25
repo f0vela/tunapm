@@ -223,3 +223,117 @@ func TestNotesRoundTrip(t *testing.T) {
 	}
 	_ = c.DeleteClient(cl.ID)
 }
+
+func TestEventsAndAgenda(t *testing.T) {
+	c := setup(t)
+	sp := func(s string) *string { return &s }
+
+	cl := store.Client{Name: "Eva Agenda"}
+	if err := c.CreateClient(&cl); err != nil {
+		t.Fatal(err)
+	}
+	// Fechas lejanas para no chocar con datos de otros tests en un servidor compartido.
+	p := store.Project{ClientID: cl.ID, Name: "Proyecto agenda", Status: store.StatusActivo, Currency: "GTQ",
+		BillingType: store.BillingParcial, BudgetCents: 500000, StartDate: sp("2031-03-02"), DueDate: sp("2031-03-20")}
+	if err := c.CreateProject(&p); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []store.Event{
+		{Title: " ", Date: "2031-03-20"},
+		{Title: "x", Date: "20/03/2031"},
+		{Title: "x", Date: "2031-03-20", Time: sp("25:00")},
+	} {
+		if err := c.CreateEvent(&bad); err == nil {
+			t.Fatalf("debió rechazarse: %+v", bad)
+		}
+	}
+	timed := store.Event{Title: "Kickoff", Kind: store.EventReunion, Date: "2031-03-20", Time: sp("9:30"), ProjectID: &p.ID, Notes: "sala 2"}
+	if err := c.CreateEvent(&timed); err != nil || timed.ID == 0 {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	// Los nombres de proyecto y cliente se leen con GET (al crear, el API en Go devuelve lo enviado).
+	if got, err := c.GetEvent(timed.ID); err != nil || got.Time == nil || *got.Time != "09:30" || got.ProjectName != p.Name || got.ClientName != "Eva Agenda" {
+		t.Fatalf("evento creado: %v %+v", err, got)
+	}
+	allDay := store.Event{Title: "Lanzamiento", Kind: "inventado", Date: "2031-03-20", ClientID: &cl.ID}
+	if err := c.CreateEvent(&allDay); err != nil || allDay.Kind != store.EventOtro || allDay.Time != nil {
+		t.Fatalf("evento de todo el día: %v %+v", err, allDay)
+	}
+	list, err := c.ListEvents("2031-03-01", "2031-03-31")
+	if err != nil || len(list) != 2 || list[0].ID != allDay.ID || list[1].ID != timed.ID {
+		t.Fatalf("ListEvents: %v %+v", err, list)
+	}
+
+	task := store.Task{ProjectID: p.ID, Title: "Tarea agenda", Status: store.TaskPendiente, Priority: 1, DueDate: sp("2031-03-10")}
+	if err := c.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	paid := store.Payment{ProjectID: p.ID, AmountCents: 100000, ScheduledDate: "2031-03-20"}
+	if err := c.CreatePayment(&paid); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.MarkPaymentPaid(paid.ID, "2031-03-20"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CreatePayment(&store.Payment{ProjectID: p.ID, AmountCents: 250000, ScheduledDate: "2031-03-20", Notes: "Anticipo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := c.Agenda("2031-03-01", "2031-03-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range items {
+		got = append(got, it.Date[8:]+" "+it.Time+" "+it.Label()+": "+it.Text())
+	}
+	want := []string{
+		"02  inicio: Proyecto agenda",
+		"10  tarea: Tarea agenda",
+		"20  otro: Lanzamiento",
+		"20  entrega: Proyecto agenda",
+		"20  cobro: Q 2,500.00 Anticipo",
+		"20 09:30 reunión: Kickoff",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("agenda = %q", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("agenda[%d] = %q, want %q (todo: %q)", i, got[i], want[i], got)
+		}
+	}
+	if items[5].Detail != "Proyecto agenda · Eva Agenda" || items[5].ProjectID != p.ID || items[4].AmountCents != 250000 {
+		t.Fatalf("detalle de la agenda: %+v / %+v", items[5], items[4])
+	}
+	if _, err := c.Agenda("", "2031-03-31"); err == nil {
+		t.Fatal("la agenda sin rango debe rechazarse")
+	}
+
+	// Quitar hora y proyecto con una actualización.
+	timed.Time, timed.ProjectID, timed.Title = nil, nil, "Kickoff movido"
+	if err := c.UpdateEvent(&timed); err != nil || timed.Time != nil || timed.ProjectID != nil {
+		t.Fatalf("UpdateEvent: %v %+v", err, timed)
+	}
+	// Borrar el proyecto y el cliente conserva los eventos.
+	if err := c.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteClient(cl.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.GetEvent(allDay.ID); err != nil || got.ClientID != nil {
+		t.Fatalf("evento tras borrar el cliente: %v %+v", err, got)
+	}
+	if snap, err := c.Snapshot(); err != nil || len(snap.Events) < 2 {
+		t.Fatalf("Snapshot.Events: %v", err)
+	}
+	for _, n := range []int64{timed.ID, allDay.ID} {
+		if err := c.DeleteEvent(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.GetEvent(timed.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetEvent tras borrar: %v", err)
+	}
+}

@@ -1,0 +1,36 @@
+{{define "calendar"}}
+{{$d := .Data}}
+<div class="sec-head"><h1>{{$d.Title}}</h1><a class="btn small primary" href="/events/new?date={{$d.Date}}&next={{.URL}}">+ Evento</a></div>
+<div class="cal-nav">
+  <span class="seg">
+    <a href="/calendar?view=dia&date={{$d.Date}}" {{if eq $d.View "dia"}}class="on"{{end}}>Día</a>
+    <a href="/calendar?view=semana&date={{$d.Date}}" {{if eq $d.View "semana"}}class="on"{{end}}>Semana</a>
+    <a href="/calendar?view=mes&date={{$d.Date}}" {{if eq $d.View "mes"}}class="on"{{end}}>Mes</a>
+  </span>
+  <span class="seg">
+    <a href="/calendar?view={{$d.View}}&date={{$d.Prev}}" aria-label="Anterior">‹</a>
+    <a href="/calendar?view={{$d.View}}&date={{$d.Today}}">Hoy</a>
+    <a href="/calendar?view={{$d.View}}&date={{$d.Next}}" aria-label="Siguiente">›</a>
+  </span>
+</div>
+{{if $d.Weeks}}
+<div class="cal">
+  {{range $d.Weekdays}}<span class="cal-wd">{{.}}</span>{{end}}
+  {{range $d.Weeks}}{{range .}}
+  <a class="cal-day{{if not .InMonth}} out{{end}}{{if .Today}} today{{end}}{{if .Selected}} sel{{end}}" href="/calendar?view=mes&date={{.Date}}" aria-label="{{.Title}}, {{len .Items}} entradas">
+    <span class="num">{{.Num}}</span>
+    {{if .Items}}
+    <span class="dots">{{range first .Items 4}}<i class="{{itemClass .}}"></i>{{end}}</span>
+    <span class="cal-items">{{range first .Items 3}}<em class="{{itemClass .}}">{{if .Time}}{{.Time}} {{end}}{{.Text}}</em>{{end}}{{if extra .Items 3}}<em class="rest">+{{extra .Items 3}} más</em>{{end}}</span>
+    {{end}}
+  </a>
+  {{end}}{{end}}
+</div>
+{{end}}
+{{range $d.Days}}
+<section class="day">
+  <div class="sec-head"><h2>{{.Title}}{{if .Today}} · hoy{{end}}</h2>{{if ne $d.View "dia"}}<a class="more" href="/events/new?date={{.Date}}&next={{$.URL}}">+ Evento</a>{{end}}</div>
+  {{if .Items}}{{template "agenda_rows" ctx .Items $.Today $.URL}}{{else}}<p class="day-empty">Nada programado.</p>{{end}}
+</section>
+{{end}}
+{{end}}

@@ -22,6 +22,9 @@ var initSQL string
 //go:embed migrations/002_notes.sql
 var notesSQL string
 
+//go:embed migrations/003_events.sql
+var eventsSQL string
+
 type Store struct {
 	db *sql.DB
 }
@@ -70,7 +73,7 @@ func (s *Store) migrate() error {
 		return err
 	}
 	// Cada migración se aplica una sola vez y sube user_version.
-	for i, script := range []string{initSQL, notesSQL} {
+	for i, script := range []string{initSQL, notesSQL, eventsSQL} {
 		if version > i {
 			continue
 		}

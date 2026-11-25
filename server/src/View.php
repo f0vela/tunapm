@@ -72,6 +72,110 @@ function excerpt(string $body): string
     return strlen($line) > 140 ? substr($line, 0, 140) . '…' : $line;
 }
 
+// ---------- calendario (semana de lunes a domingo) ----------
+
+function validDate(string $s): bool
+{
+    return (bool) preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+}
+
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const WEEKDAYS_SHORT = ['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'];
+
+function calDate(string $date): \DateTimeImmutable { return new \DateTimeImmutable($date . ' 00:00:00', new \DateTimeZone('UTC')); }
+function addDays(string $date, int $days): string { return calDate($date)->modify(($days >= 0 ? '+' : '') . $days . ' days')->format('Y-m-d'); }
+
+/** Suma meses; si el día no existe en el mes destino usa el último (31 ene + 1 mes = 28 feb). */
+function addMonths(string $date, int $months): string
+{
+    $t = calDate($date);
+    $first = $t->modify('first day of this month')->modify(($months >= 0 ? '+' : '') . $months . ' months');
+    $day = min((int) $t->format('j'), (int) $first->format('t'));
+    return $first->format('Y-m-') . sprintf('%02d', $day);
+}
+
+function weekStart(string $date): string
+{
+    $t = calDate($date);
+    return $t->modify('-' . (((int) $t->format('w') + 6) % 7) . ' days')->format('Y-m-d');
+}
+
+/** @return list<string> los 7 días (lunes a domingo) de la semana de $date */
+function weekDays(string $date): array
+{
+    $start = weekStart($date);
+    return array_map(fn (int $i) => addDays($start, $i), range(0, 6));
+}
+
+/** @return list<list<string>> semanas completas que cubren el mes de $date */
+function monthGrid(string $date): array
+{
+    $t = calDate($date);
+    $last = $t->modify('last day of this month')->format('Y-m-d');
+    $weeks = [];
+    for ($day = weekStart($t->modify('first day of this month')->format('Y-m-d')); $day <= $last; $day = addDays($day, 7)) {
+        $weeks[] = weekDays($day);
+    }
+    return $weeks;
+}
+
+function monthTitle(string $date): string { $t = calDate($date); return MONTHS[(int) $t->format('n') - 1] . ' ' . $t->format('Y'); }
+function dayTitle(string $date): string
+{
+    $t = calDate($date);
+    return WEEKDAYS[(int) $t->format('w')] . ' ' . $t->format('j') . ' de ' . MONTHS[(int) $t->format('n') - 1];
+}
+function weekTitle(string $date): string
+{
+    $days = weekDays($date);
+    $a = calDate($days[0]);
+    $b = calDate($days[6]);
+    $ma = MONTHS[(int) $a->format('n') - 1];
+    $mb = MONTHS[(int) $b->format('n') - 1];
+    if ($ma === $mb) {
+        return $a->format('j') . ' - ' . $b->format('j') . ' de ' . $mb . ' ' . $b->format('Y');
+    }
+    return $a->format('j') . ' ' . substr($ma, 0, 3) . ' - ' . $b->format('j') . ' ' . substr($mb, 0, 3) . ' ' . $b->format('Y');
+}
+
+/** Etiqueta corta de una entrada del calendario. */
+function itemLabel(array $it): string
+{
+    return match ($it['type']) {
+        'task' => 'tarea', 'payment' => 'cobro', 'project_start' => 'inicio', 'project_due' => 'entrega',
+        default => Repo::EVENT_KINDS[$it['kind']] ?? 'evento',
+    };
+}
+
+/** Título para mostrar; en un cobro incluye el monto. */
+function itemText(array $it): string
+{
+    if ($it['type'] !== 'payment') {
+        return $it['title'];
+    }
+    return trim(money($it['amount_cents'], $it['currency']) . ' ' . $it['title']);
+}
+
+/** Clases CSS de una entrada según su tipo y estado. */
+function itemClass(array $it): string
+{
+    $class = str_starts_with($it['type'], 'project') ? 't-project' : 't-' . $it['type'];
+    return $class . ($it['overdue'] ? ' overdue' : '') . ($it['done'] ? ' done' : '');
+}
+
+/** Dónde se edita cada entrada. */
+function itemUrl(array $it, string $next): string
+{
+    $q = '?next=' . rawurlencode($next);
+    return match ($it['type']) {
+        'event' => '/events/' . $it['id'] . '/edit' . $q,
+        'task' => '/tasks/' . $it['id'] . '/edit' . $q,
+        'payment' => '/payments/' . $it['id'] . '/edit' . $q,
+        default => '/projects/' . $it['id'],
+    };
+}
+
 function pct(int $done, int $total): int { return $total === 0 ? 0 : intdiv($done * 100, $total); }
 function prio(int $p): string { return ['baja', 'normal', 'alta', 'urgente'][max(0, min(3, $p))]; }
 function statusLabel(string $s): string { return str_replace('_', ' ', $s); }

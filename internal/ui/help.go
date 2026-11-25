@@ -9,7 +9,7 @@ type helpSection struct {
 
 var helpLeft = []helpSection{
 	{"Global", [][2]string{
-		{"1-5", "cambiar de vista"},
+		{"1-6", "cambiar de vista"},
 		{"ctrl+k  :", "paleta de comandos"},
 		{"j/k  ↑/↓", "mover la selección"},
 		{"esc", "limpiar filtros, cerrar ventanas"},
@@ -27,7 +27,7 @@ var helpLeft = []helpSection{
 	{"Notas", [][2]string{
 		{"n  e  d", "nueva, editar, borrar"},
 		{"t  f", "filtrar por etiqueta o proyecto"},
-		{"/  enter", "buscar, leer completa (j/k desplaza)"},
+		{"/  enter", "buscar, leer completa"},
 	}},
 }
 
@@ -45,12 +45,20 @@ var helpRight = []helpSection{
 	{"Cobros", [][2]string{
 		{"x", "marcar la cuota como pagada"},
 	}},
+	{"Calendario", [][2]string{
+		{"←→  ↑↓", "día, semana"},
+		{"[ ]  t", "mes anterior o siguiente, hoy"},
+		{"v  tab", "vista mes/semana/día, otra entrada"},
+		{"n  e  d", "nuevo evento, editar, borrar"},
+		{"enter", "abrir la tarea, cobro o proyecto"},
+	}},
 	{"Creación rápida en la paleta", [][2]string{
 		{"t", "Diseñar logo @proyecto !alta ^viernes"},
 		{"c", "Juan Pérez #Empresa"},
 		{"p", "Sitio web @cliente $5000 usd ^20/12"},
 		{"$", "2500 @proyecto ^15/12"},
 		{"n", "Idea para el home @proyecto #idea"},
+		{"e", "Reunión @proyecto ^viernes 15:30"},
 	}},
 }
 
@@ -79,9 +87,19 @@ func (a *App) helpView() string {
 		body = helpColumn(append(append([]helpSection{}, helpLeft...), helpRight...), inner)
 	}
 	lines := strings.Split(body, "\n")
-	if limit := a.height - 10; limit > 3 && len(lines) > limit {
-		lines = append(lines[:limit-1], mutedStyle.Render("… agranda la ventana para ver todo"))
+	footer := renderHints("esc cerrar")
+	// Si no cabe, se desplaza con j/k en vez de cortarse.
+	if page := max(a.height-10, 3); len(lines) > page {
+		a.helpOff = max(min(a.helpOff, len(lines)-page), 0)
+		more := "↓ hay más"
+		if a.helpOff == len(lines)-page {
+			more = "fin"
+		}
+		lines = lines[a.helpOff : a.helpOff+page]
+		footer = spread(renderHints("j/k desplaza · esc cerrar"), mutedStyle.Render(more), inner)
+	} else {
+		a.helpOff = 0
 	}
-	content := titleStyle.Render("Atajos de teclado") + "\n\n" + strings.Join(lines, "\n") + "\n\n" + renderHints("esc cerrar")
+	content := titleStyle.Render("Atajos de teclado") + "\n\n" + strings.Join(lines, "\n") + "\n\n" + footer
 	return modalStyle.Width(width).Render(content)
 }

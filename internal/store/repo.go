@@ -41,6 +41,12 @@ type Repo interface {
 	ListNotes(f NoteFilter) ([]Note, error)
 	NoteTags() ([]TagCount, error)
 
+	CreateEvent(e *Event) error
+	UpdateEvent(e *Event) error
+	DeleteEvent(id int64) error
+	GetEvent(id int64) (Event, error)
+	ListEvents(from, to string) ([]Event, error)
+
 	Snapshot() (Snapshot, error)
 }
 

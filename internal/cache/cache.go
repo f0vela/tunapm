@@ -213,6 +213,9 @@ func (r *Repo) DeleteClient(id int64) error {
 		if err := r.Store.DeleteClient(id); err != nil {
 			return id, nil, err
 		}
+		if err := r.detachPending("event", "client_id", id); err != nil {
+			return id, nil, err
+		}
 		return id, nil, r.purgeTemp("client", id, nil)
 	})
 }
@@ -247,8 +250,10 @@ func (r *Repo) DeleteProject(id int64) error {
 		if err := r.Store.DeleteProject(id); err != nil {
 			return id, nil, err
 		}
-		if err := r.detachPendingNotes(id); err != nil {
-			return id, nil, err
+		for _, kind := range []string{"note", "event"} {
+			if err := r.detachPending(kind, "project_id", id); err != nil {
+				return id, nil, err
+			}
 		}
 		return id, nil, r.purgeTemp("project", id, children)
 	})
@@ -298,10 +303,10 @@ func (r *Repo) DeleteNote(id int64) error {
 	})
 }
 
-// detachPendingNotes: al borrar un proyecto sus notas quedan sin proyecto, así que
-// las notas aún en la cola no deben seguir apuntando a él.
-func (r *Repo) detachPendingNotes(projectID int64) error {
-	rows, err := r.DB().Query("SELECT seq, body FROM outbox WHERE kind = 'note' AND body <> ''")
+// detachPending: al borrar un proyecto (o cliente), lo que queda suelto en vez de
+// borrarse (notas, eventos) no debe seguir apuntando a él desde la cola.
+func (r *Repo) detachPending(kind, field string, parentID int64) error {
+	rows, err := r.DB().Query("SELECT seq, body FROM outbox WHERE kind = ? AND body <> ''", kind)
 	if err != nil {
 		return err
 	}
@@ -315,10 +320,10 @@ func (r *Repo) detachPendingNotes(projectID int64) error {
 		}
 		var m map[string]json.RawMessage
 		var ref int64
-		if json.Unmarshal([]byte(body), &m) != nil || json.Unmarshal(m["project_id"], &ref) != nil || ref != projectID {
+		if json.Unmarshal([]byte(body), &m) != nil || json.Unmarshal(m[field], &ref) != nil || ref != parentID {
 			continue
 		}
-		m["project_id"] = json.RawMessage("null")
+		m[field] = json.RawMessage("null")
 		nb, _ := json.Marshal(m)
 		fixes[seq] = string(nb)
 	}
@@ -329,6 +334,28 @@ func (r *Repo) detachPendingNotes(projectID int64) error {
 		}
 	}
 	return nil
+}
+
+func (r *Repo) CreateEvent(e *store.Event) error {
+	return r.write("event", "create", func() (int64, any, error) {
+		err := r.Store.CreateEvent(e)
+		return e.ID, e, err // el id se lee DESPUÉS de crear (id temporal del espejo)
+	})
+}
+
+func (r *Repo) UpdateEvent(e *store.Event) error {
+	return r.write("event", "update", func() (int64, any, error) {
+		return e.ID, e, r.Store.UpdateEvent(e)
+	})
+}
+
+func (r *Repo) DeleteEvent(id int64) error {
+	return r.write("event", "delete", func() (int64, any, error) {
+		if err := r.Store.DeleteEvent(id); err != nil {
+			return id, nil, err
+		}
+		return id, nil, r.purgeTemp("event", id, nil)
+	})
 }
 
 func (r *Repo) CreatePayment(p *store.Payment) error {
@@ -429,9 +456,9 @@ func (r *Repo) rewriteRefs(kind string, oldID, newID int64) error {
 	var field string
 	switch kind {
 	case "client":
-		childKinds, field = []string{"project"}, "client_id"
+		childKinds, field = []string{"project", "event"}, "client_id"
 	case "project":
-		childKinds, field = []string{"task", "payment", "note"}, "project_id"
+		childKinds, field = []string{"task", "payment", "note", "event"}, "project_id"
 	default:
 		return nil
 	}
@@ -606,6 +633,8 @@ func kindLabel(kind string) string {
 		return "tarea"
 	case "note":
 		return "nota"
+	case "event":
+		return "evento"
 	}
 	return "cuota"
 }
@@ -690,6 +719,25 @@ func (r *Repo) send(o op) (int64, error) {
 			return 0, r.api.UpdateNote(&n)
 		case "delete":
 			return 0, r.api.DeleteNote(o.entID)
+		}
+	case "event":
+		var e store.Event
+		if err := decodeBody(o, &e); err != nil {
+			return 0, err
+		}
+		if o.op != "delete" && ((e.ProjectID != nil && IsTemp(*e.ProjectID)) || (e.ClientID != nil && IsTemp(*e.ClientID))) {
+			return 0, errDependency
+		}
+		switch o.op {
+		case "create":
+			e.ID = 0
+			err := r.api.CreateEvent(&e)
+			return e.ID, err
+		case "update":
+			e.ID = o.entID
+			return 0, r.api.UpdateEvent(&e)
+		case "delete":
+			return 0, r.api.DeleteEvent(o.entID)
 		}
 	case "payment":
 		switch o.op {

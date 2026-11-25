@@ -40,14 +40,20 @@
   {{.Content}}
 </main>
 {{if ne .Nav ""}}
+<input type="checkbox" id="nav-more" class="nav-toggle" aria-label="Más secciones">
 <nav class="tabs">
-  <a href="/" {{if eq .Nav "inicio"}}class="on"{{end}}>Inicio</a>
   <a href="/tasks" {{if eq .Nav "tareas"}}class="on"{{end}}>Tareas</a>
   <a href="/projects" {{if eq .Nav "proyectos"}}class="on"{{end}}>Proyectos</a>
-  <a href="/payments" {{if eq .Nav "cuotas"}}class="on"{{end}}>Cuotas</a>
-  <a href="/clients" {{if eq .Nav "clientes"}}class="on"{{end}}>Clientes</a>
+  <a href="/calendar" {{if eq .Nav "calendario"}}class="on"{{end}}>Calendario</a>
   <a href="/notes" {{if eq .Nav "notas"}}class="on"{{end}}>Notas</a>
+  <label for="nav-more" class="more{{if or (eq .Nav "inicio") (eq .Nav "cuotas") (eq .Nav "clientes")}} on{{end}}">Más</label>
+  <div class="extra">
+    <a href="/" {{if eq .Nav "inicio"}}class="on"{{end}}>Inicio</a>
+    <a href="/payments" {{if eq .Nav "cuotas"}}class="on"{{end}}>Cuotas</a>
+    <a href="/clients" {{if eq .Nav "clientes"}}class="on"{{end}}>Clientes</a>
+  </div>
 </nav>
+<label for="nav-more" class="nav-scrim" aria-hidden="true"></label>
 {{end}}
 </body>
 </html>{{end}}

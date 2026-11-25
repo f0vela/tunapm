@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -41,7 +42,9 @@ func TestWebFlow(t *testing.T) {
 
 	for _, path := range []string{"/", "/tasks", "/projects", "/projects/1", "/clients", "/clients/1", "/payments",
 		"/tasks/new", "/projects/new", "/payments/new", "/clients/new", "/static/app.css",
-		"/notes", "/notes/new", "/notes?project_id=none&tag=idea&q=x"} {
+		"/notes", "/notes/new", "/notes?project_id=none&tag=idea&q=x",
+		"/calendar", "/calendar?view=semana&date=2026-12-01", "/calendar?view=dia&date=2026-12-01",
+		"/calendar?view=mes&date=2027-02-28", "/calendar?date=basura", "/events/new?date=2026-12-01&project_id=1"} {
 		r, _ := cli.Get(srv.URL + path)
 		if r.StatusCode != 200 {
 			t.Errorf("GET %s = %d", path, r.StatusCode)
@@ -103,6 +106,40 @@ func TestWebFlow(t *testing.T) {
 	}
 	if r, _ = cli.PostForm(srv.URL+"/notes/1/delete", nil); r.StatusCode != 303 {
 		t.Fatalf("borrar nota = %d", r.StatusCode)
+	}
+	// Calendario: evento con hora y proyecto; aparece en el día junto a la cuota por cobrar.
+	r, _ = cli.PostForm(srv.URL+"/events", url.Values{"title": {"Reunión zzc"}, "kind": {"reunion"}, "date": {"2026-12-01"}, "time": {"9:30"}, "project_id": {"1"}})
+	if r.StatusCode != 303 || !strings.Contains(r.Header.Get("Location"), "date=2026-12-01") {
+		t.Fatalf("crear evento = %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	ev, _ := st.GetEvent(1)
+	if ev.Time == nil || *ev.Time != "09:30" || ev.ProjectID == nil {
+		t.Fatalf("evento = %+v", ev)
+	}
+	for _, view := range []string{"dia", "semana", "mes"} {
+		res, _ := cli.Get(srv.URL + "/calendar?view=" + view + "&date=2026-12-01")
+		page, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if !strings.Contains(string(page), "Reunión zzc") || !strings.Contains(string(page), "1,500.50") {
+			t.Errorf("la vista %s debe mostrar el evento y la cuota por cobrar", view)
+		}
+	}
+	if r, _ = cli.PostForm(srv.URL+"/events", url.Values{"title": {"x"}, "date": {"2026-12-01"}, "time": {"99:99"}}); r.StatusCode != 422 {
+		t.Fatalf("hora inválida = %d", r.StatusCode)
+	}
+	if r, _ = cli.PostForm(srv.URL+"/events/1", url.Values{"title": {"Movida"}, "kind": {"otro"}, "date": {"2026-12-02"}, "time": {""}, "project_id": {""}}); r.StatusCode != 303 {
+		t.Fatalf("editar evento = %d", r.StatusCode)
+	}
+	if ev, _ = st.GetEvent(1); ev.Time != nil || ev.ProjectID != nil || ev.Date != "2026-12-02" {
+		t.Fatalf("evento editado = %+v", ev)
+	}
+	for _, path := range []string{"/events/1/edit", "/projects/1"} {
+		if r, _ := cli.Get(srv.URL + path); r.StatusCode != 200 {
+			t.Errorf("GET %s = %d", path, r.StatusCode)
+		}
+	}
+	if r, _ = cli.PostForm(srv.URL+"/events/1/delete", nil); r.StatusCode != 303 {
+		t.Fatalf("borrar evento = %d", r.StatusCode)
 	}
 	// Error de validación se muestra en el formulario.
 	r, _ = cli.PostForm(srv.URL+"/payments", url.Values{"project_id": {"1"}, "amount": {"abc"}, "scheduled_date": {"2026-12-01"}})

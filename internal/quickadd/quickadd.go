@@ -17,6 +17,7 @@ const (
 	KindProject Kind = "p"
 	KindPayment Kind = "$"
 	KindNote    Kind = "n"
+	KindEvent   Kind = "e"
 )
 
 var (
@@ -42,6 +43,7 @@ type Draft struct {
 	Currency    string
 	Priority    int    // -1 si no se indicó
 	Date        string // texto de ^, sin parsear (ver internal/dates)
+	Time        string // hora de un evento (HH:MM), sin validar
 }
 
 // Parse interpreta:
@@ -51,6 +53,7 @@ type Draft struct {
 //	p Sitio web @Acme $5000 usd ^2026-12-20
 //	$ 2500 @web-acme ^15/12
 //	n Idea para el home @web-acme #idea #diseño
+//	e Reunión de avance @web-acme ^viernes 15:30 #reunion
 func Parse(input string) (Draft, error) {
 	fields := strings.Fields(input)
 	if len(fields) == 0 {
@@ -59,7 +62,7 @@ func Parse(input string) (Draft, error) {
 
 	kind := Kind(fields[0])
 	switch kind {
-	case KindTask, KindClient, KindProject, KindPayment, KindNote:
+	case KindTask, KindClient, KindProject, KindPayment, KindNote, KindEvent:
 	default:
 		return Draft{}, ErrNotQuickAdd
 	}
@@ -77,6 +80,13 @@ func Parse(input string) (Draft, error) {
 		case kind == KindNote && !strings.HasPrefix(field, "@"):
 			// El texto de una nota es libre: ^, ! o "usd" no son sintaxis aquí.
 			titleWords = append(titleWords, field)
+		case kind == KindEvent && strings.HasPrefix(field, "#"):
+			// En un evento #palabra es el tipo (reunion, llamada, presentacion, lanzamiento).
+			if tag := strings.TrimLeft(field, "#"); tag != "" {
+				d.Tags = tag
+			}
+		case kind == KindEvent && d.Time == "" && looksLikeTime(field):
+			d.Time = field
 		case strings.HasPrefix(field, "^"):
 			if len(field) == 1 {
 				return Draft{}, fmt.Errorf("fecha vacía")
@@ -131,4 +141,18 @@ func Parse(input string) (Draft, error) {
 
 var priorities = map[string]int{
 	"baja": 0, "media": 1, "alta": 2, "urgente": 3,
+}
+
+// looksLikeTime reconoce "9:30" o "15:00" (no valida el rango).
+func looksLikeTime(s string) bool {
+	h, m, ok := strings.Cut(s, ":")
+	if !ok || len(h) == 0 || len(h) > 2 || len(m) != 2 {
+		return false
+	}
+	for _, r := range h + m {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

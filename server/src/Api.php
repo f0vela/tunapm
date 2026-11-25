@@ -102,6 +102,22 @@ final class Api
             ['PUT', "/api/notes/$id", fn (int $i) => $ok($r->updateNote($i, self::body()))],
             ['DELETE', "/api/notes/$id", function (int $i) use ($r, $none) { $r->deleteNote($i); $none(); }],
 
+            ['GET', '/api/events', fn () => $ok($r->listEvents((string) ($_GET['from'] ?? ''), (string) ($_GET['to'] ?? '')))],
+            ['POST', '/api/events', fn () => $created($r->createEvent(self::body()))],
+            ['GET', "/api/events/$id", fn (int $i) => $ok($r->getEvent($i))],
+            ['PUT', "/api/events/$id", fn (int $i) => $ok($r->updateEvent($i, self::body()))],
+            ['DELETE', "/api/events/$id", function (int $i) use ($r, $none) { $r->deleteEvent($i); $none(); }],
+
+            // Calendario: tareas, cuotas por cobrar, fechas de proyectos y eventos en un rango.
+            ['GET', '/api/agenda', function () use ($r, $ok) {
+                $from = (string) ($_GET['from'] ?? '');
+                $to = (string) ($_GET['to'] ?? '');
+                if (!validDate($from) || !validDate($to)) {
+                    throw new AppError(400, 'bad_request', 'from y to son obligatorios (YYYY-MM-DD)');
+                }
+                $ok($r->agenda($from, $to, date('Y-m-d')));
+            }],
+
             ['GET', '/api/payments', fn () => $ok($r->listPayments())],
             ['POST', '/api/payments', fn () => $created($r->createPayment(self::body()))],
             ['GET', "/api/payments/$id", fn (int $i) => $ok($r->getPayment($i))],

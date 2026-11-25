@@ -100,6 +100,7 @@ final class Repo
                 'tasks' => $this->listTasks(['mode' => 'todas']),
                 'payments' => $this->listPayments(),
                 'notes' => $this->listNotes(),
+                'events' => $this->listEvents(),
             ];
         } finally {
             $this->db->commit();
@@ -523,5 +524,167 @@ final class Repo
     public function deleteNote(int $id): void
     {
         $this->affected($this->q('DELETE FROM notes WHERE id = ?', [$id]));
+    }
+
+    // ---------- events ----------
+
+    public const EVENT_KINDS = ['reunion' => 'reunión', 'llamada' => 'llamada', 'presentacion' => 'presentación',
+        'lanzamiento' => 'lanzamiento', 'otro' => 'otro'];
+
+    private const EVENT = "SELECT e.id, e.title, e.kind, e.date, e.time, e.project_id, e.client_id, e.notes, e.created_at,
+        COALESCE(p.name, '') AS project_name, COALESCE(c.name, pc.name, '') AS client_name
+        FROM events e LEFT JOIN projects p ON p.id = e.project_id
+        LEFT JOIN clients c ON c.id = e.client_id LEFT JOIN clients pc ON pc.id = p.client_id";
+
+    /** Acepta "9:30", "09:30" o "0930" → "09:30"; null si viene vacío (igual que store.NormalizeTime en Go). */
+    public static function normalizeTime(mixed $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+        if (!is_scalar($raw)) {
+            throw new BadInput('campo inválido: time');
+        }
+        $t = trim((string) $raw);
+        if ($t === '') {
+            return null;
+        }
+        if (!str_contains($t, ':') && strlen($t) >= 3 && strlen($t) <= 4) {
+            $t = substr($t, 0, -2) . ':' . substr($t, -2);
+        }
+        if (strlen($t) === 4) {
+            $t = '0' . $t;
+        }
+        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t)) {
+            throw new BadInput('hora del evento inválida (usa HH:MM, 24 horas)');
+        }
+        return $t;
+    }
+
+    private static function optionalId(array $d, string $k): ?int
+    {
+        $v = $d[$k] ?? null;
+        return ($v === null || $v === '' || $v === 0 || $v === '0') ? null : self::int($d, $k);
+    }
+
+    public function getEvent(int $id): array { return $this->one(self::EVENT . ' WHERE e.id = ?', [$id]); }
+
+    /** Eventos entre $from y $to (inclusive); un límite vacío no acota. */
+    public function listEvents(string $from = '', string $to = ''): array
+    {
+        $where = [];
+        $args = [];
+        if ($from !== '') {
+            $where[] = 'e.date >= ?';
+            $args[] = $from;
+        }
+        if ($to !== '') {
+            $where[] = 'e.date <= ?';
+            $args[] = $to;
+        }
+        return $this->all(self::EVENT . ($where ? ' WHERE ' . implode(' AND ', $where) : '') .
+            ' ORDER BY e.date, e.time IS NOT NULL, e.time, e.id', $args);
+    }
+
+    private function eventFields(array $d): array
+    {
+        $title = self::required(self::str($d, 'title'), 'title');
+        $date = self::date($d['date'] ?? null);
+        if ($date === null || !checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))) {
+            throw new BadInput('fecha del evento inválida (usa YYYY-MM-DD)');
+        }
+        $kind = self::str($d, 'kind', 'otro');
+        $notes = $d['notes'] ?? '';
+        if (!is_scalar($notes)) {
+            throw new BadInput('campo inválido: notes');
+        }
+        return [
+            $title, isset(self::EVENT_KINDS[$kind]) ? $kind : 'otro', $date, self::normalizeTime($d['time'] ?? null),
+            self::optionalId($d, 'project_id'), self::optionalId($d, 'client_id'), (string) $notes,
+        ];
+    }
+
+    public function createEvent(array $d): array
+    {
+        $f = $this->eventFields($d);
+        $this->guard(fn () => $this->q(
+            'INSERT INTO events (title, kind, date, time, project_id, client_id, notes, created_at) VALUES (?,?,?,?,?,?,?,?)',
+            [...$f, self::now()]
+        ));
+        return $this->getEvent((int) $this->db->lastInsertId());
+    }
+
+    public function updateEvent(int $id, array $d): array
+    {
+        $f = $this->eventFields($d);
+        $st = $this->guard(fn () => $this->q(
+            'UPDATE events SET title=?, kind=?, date=?, time=?, project_id=?, client_id=?, notes=? WHERE id=?',
+            [...$f, $id]
+        ));
+        $this->affected($st);
+        return $this->getEvent($id);
+    }
+
+    public function deleteEvent(int $id): void
+    {
+        $this->affected($this->q('DELETE FROM events WHERE id = ?', [$id]));
+    }
+
+    // ---------- agenda (calendario) ----------
+
+    private static function joinNames(string $a, string $b): string
+    {
+        return $a === '' ? $b : ($b === '' ? $a : $a . ' · ' . $b);
+    }
+
+    /**
+     * Entradas del calendario entre $from y $to: eventos, tareas con fecha, cuotas por cobrar
+     * e inicio/entrega de proyectos. Mismas reglas y mismo orden que internal/agenda en Go.
+     */
+    public function agenda(string $from, string $to, string $today): array
+    {
+        $item = fn (array $o) => $o + ['time' => '', 'kind' => '', 'detail' => '', 'project_id' => 0, 'done' => false,
+            'overdue' => false, 'amount_cents' => 0, 'currency' => ''];
+        $items = [];
+        foreach ($this->listEvents($from, $to) as $e) {
+            $items[] = $item(['date' => $e['date'], 'time' => (string) ($e['time'] ?? ''), 'type' => 'event', 'kind' => $e['kind'],
+                'id' => $e['id'], 'title' => $e['title'], 'detail' => self::joinNames($e['project_name'], $e['client_name']),
+                'project_id' => (int) ($e['project_id'] ?? 0)]);
+        }
+        foreach ($this->all(self::TASK . ' WHERE t.due_date BETWEEN ? AND ?', [$from, $to]) as $t) {
+            $done = $t['status'] === 'hecho';
+            $items[] = $item(['date' => $t['due_date'], 'type' => 'task', 'id' => $t['id'], 'title' => $t['title'],
+                'detail' => self::joinNames($t['project_name'], $t['client_name']), 'project_id' => $t['project_id'],
+                'done' => $done, 'overdue' => !$done && $t['due_date'] < $today]);
+        }
+        // Solo lo que falta cobrar.
+        foreach ($this->all(self::PAYMENT . ' WHERE pay.paid_date IS NULL AND pay.scheduled_date BETWEEN ? AND ?', [$from, $to]) as $p) {
+            $items[] = $item(['date' => $p['scheduled_date'], 'type' => 'payment', 'id' => $p['id'], 'title' => $p['notes'],
+                'detail' => self::joinNames($p['project_name'], $p['client_name']), 'project_id' => $p['project_id'],
+                'overdue' => $p['scheduled_date'] < $today, 'amount_cents' => $p['amount_cents'], 'currency' => $p['currency']]);
+        }
+        foreach ($this->listProjects() as $p) {
+            if ($p['status'] === 'cancelado') {
+                continue;
+            }
+            $done = $p['status'] === 'completado';
+            $start = $p['start_date'];
+            $due = $p['due_date'];
+            if ($start !== null && $start >= $from && $start <= $to) {
+                $items[] = $item(['date' => $start, 'type' => 'project_start', 'id' => $p['id'], 'title' => $p['name'],
+                    'detail' => $p['client_name'], 'project_id' => $p['id'], 'done' => $done || $start < $today]);
+            }
+            if ($due !== null && $due >= $from && $due <= $to) {
+                $items[] = $item(['date' => $due, 'type' => 'project_due', 'id' => $p['id'], 'title' => $p['name'],
+                    'detail' => $p['client_name'], 'project_id' => $p['id'], 'done' => $done, 'overdue' => !$done && $due < $today]);
+            }
+        }
+        $order = ['event' => 0, 'project_due' => 1, 'project_start' => 2, 'payment' => 3, 'task' => 4];
+        usort($items, fn (array $a, array $b) => strcmp($a['date'], $b['date'])
+            ?: (($a['time'] === '' ? 0 : 1) <=> ($b['time'] === '' ? 0 : 1))
+            ?: strcmp($a['time'], $b['time'])
+            ?: ($order[$a['type']] <=> $order[$b['type']])
+            ?: ($a['id'] <=> $b['id']));
+        return $items;
     }
 }

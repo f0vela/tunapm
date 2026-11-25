@@ -3,7 +3,9 @@ package web
 import (
 	"net/http"
 	"strings"
+	"time"
 
+	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
 	"tunapm/internal/money"
 	"tunapm/internal/store"
@@ -200,6 +202,7 @@ type projectDetail struct {
 	Payments []store.Payment
 	Totals   store.ProjectTotals
 	Notes    []store.Note
+	Agenda   []agenda.Item // eventos del proyecto de hoy en adelante
 }
 
 func (s *Server) projectShow(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +216,17 @@ func (s *Server) projectShow(w http.ResponseWriter, r *http.Request) {
 	pays, _ := s.repo.PaymentsByProject(id)
 	totals, _ := s.repo.ProjectTotals(id)
 	notes, _ := s.repo.ListNotes(store.NoteFilter{ProjectID: &id})
-	s.render(w, r, "project", "proyectos", p.Name, projectDetail{p, tasks, pays, totals, notes}, 200, "")
+	// En el proyecto solo se listan sus eventos: tareas y cuotas ya tienen su sección.
+	var upcoming []agenda.Item
+	today := dates.Today()
+	if items, err := agenda.Build(s.repo, today, agenda.Add(today, 365), today); err == nil {
+		for _, it := range items {
+			if it.Type == agenda.TypeEvent && it.ProjectID == id {
+				upcoming = append(upcoming, it)
+			}
+		}
+	}
+	s.render(w, r, "project", "proyectos", p.Name, projectDetail{p, tasks, pays, totals, notes, upcoming}, 200, "")
 }
 
 type projectForm struct {
@@ -584,4 +597,163 @@ func (s *Server) noteDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back(w, r, "/notes", "Nota eliminada")
+}
+
+// ---------- calendario ----------
+
+type calDay struct {
+	Date     string
+	Num      string
+	Title    string
+	InMonth  bool
+	Today    bool
+	Selected bool
+	Items    []agenda.Item
+}
+
+type calData struct {
+	View     string // mes, semana o dia
+	Date     string
+	Title    string
+	Prev     string
+	Next     string
+	Today    string
+	Weekdays []string
+	Weeks    [][]calDay // solo en la vista de mes
+	Days     []calDay   // agenda: el día elegido, o los 7 de la semana
+}
+
+func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
+	today := dates.Today()
+	d := calData{View: r.URL.Query().Get("view"), Date: r.URL.Query().Get("date"), Today: today, Weekdays: agenda.WeekdayShort}
+	if _, err := time.Parse("2006-01-02", d.Date); err != nil {
+		d.Date = today
+	}
+	var from, to string
+	switch d.View {
+	case "semana":
+		week := agenda.Week(d.Date)
+		from, to = week[0], week[6]
+		d.Title = agenda.WeekTitle(d.Date)
+		d.Prev, d.Next = agenda.Add(d.Date, -7), agenda.Add(d.Date, 7)
+	case "dia":
+		from, to = d.Date, d.Date
+		d.Title = agenda.DayTitle(d.Date) + " " + d.Date[:4]
+		d.Prev, d.Next = agenda.Add(d.Date, -1), agenda.Add(d.Date, 1)
+	default:
+		d.View = "mes"
+		grid := agenda.MonthGrid(d.Date)
+		from, to = grid[0][0], grid[len(grid)-1][6]
+		d.Title = agenda.MonthTitle(d.Date)
+		d.Prev, d.Next = agenda.AddMonths(d.Date, -1), agenda.AddMonths(d.Date, 1)
+	}
+	items, err := agenda.Build(s.repo, from, to, today)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	byDate := agenda.ByDate(items)
+	day := func(date string) calDay {
+		return calDay{Date: date, Num: agenda.DayNumber(date), Title: agenda.DayTitle(date), InMonth: agenda.SameMonth(date, d.Date),
+			Today: date == today, Selected: date == d.Date, Items: byDate[date]}
+	}
+	switch d.View {
+	case "mes":
+		for _, week := range agenda.MonthGrid(d.Date) {
+			row := make([]calDay, 0, 7)
+			for _, date := range week {
+				row = append(row, day(date))
+			}
+			d.Weeks = append(d.Weeks, row)
+		}
+		d.Days = []calDay{day(d.Date)}
+	case "semana":
+		for _, date := range agenda.Week(d.Date) {
+			d.Days = append(d.Days, day(date))
+		}
+	default:
+		d.Days = []calDay{day(d.Date)}
+	}
+	s.render(w, r, "calendar", "calendario", "Calendario", d, 200, "")
+}
+
+type eventForm struct {
+	Event    store.Event
+	Kinds    []string
+	Projects []store.Project
+	Clients  []store.Client
+	Next     string
+}
+
+func (s *Server) eventFormPage(w http.ResponseWriter, r *http.Request, e store.Event, status int, errMsg string) {
+	projects, err := s.repo.ListProjects()
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	clients, _ := s.repo.ListClients()
+	title := "Nuevo evento"
+	if e.ID != 0 {
+		title = "Editar evento"
+	}
+	s.render(w, r, "event_form", "calendario", title, eventForm{e, store.EventKinds, projects, clients, r.FormValue("next")}, status, errMsg)
+}
+
+func (s *Server) eventNew(w http.ResponseWriter, r *http.Request) {
+	e := store.Event{Kind: store.EventReunion, Date: r.URL.Query().Get("date")}
+	if _, err := time.Parse("2006-01-02", e.Date); err != nil {
+		e.Date = dates.Today()
+	}
+	if pid := queryID(r, "project_id"); pid > 0 {
+		e.ProjectID = &pid
+	}
+	if cid := queryID(r, "client_id"); cid > 0 {
+		e.ClientID = &cid
+	}
+	s.eventFormPage(w, r, e, 200, "")
+}
+
+func (s *Server) eventEdit(w http.ResponseWriter, r *http.Request) {
+	e, err := s.repo.GetEvent(pathID(r))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.eventFormPage(w, r, e, 200, "")
+}
+
+func (s *Server) eventSave(w http.ResponseWriter, r *http.Request) {
+	e := store.Event{
+		ID:    pathID(r),
+		Title: strings.TrimSpace(r.FormValue("title")),
+		Kind:  r.FormValue("kind"),
+		Date:  strings.TrimSpace(r.FormValue("date")),
+		Time:  optDate(r.FormValue("time")),
+		Notes: strings.ReplaceAll(strings.TrimSpace(r.FormValue("notes")), "\r\n", "\n"),
+	}
+	if pid := formID(r, "project_id"); pid > 0 {
+		e.ProjectID = &pid
+	}
+	if cid := formID(r, "client_id"); cid > 0 {
+		e.ClientID = &cid
+	}
+	var err error
+	if e.ID == 0 {
+		err = s.repo.CreateEvent(&e)
+	} else {
+		err = s.repo.UpdateEvent(&e)
+	}
+	if err != nil {
+		s.eventFormPage(w, r, e, 422, errText(err))
+		return
+	}
+	back(w, r, "/calendar?view=dia&date="+e.Date, "Evento guardado")
+}
+
+func (s *Server) eventDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.repo.DeleteEvent(pathID(r)); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	back(w, r, "/calendar", "Evento eliminado")
 }

@@ -30,7 +30,7 @@ Para probar sin capturar datos:
 
 ## Vistas
 
-Arriba están las pestañas `1 Tareas · 2 Proyectos · 3 Clientes · 4 Cobros · 5 Notas`.
+Arriba están las pestañas `1 Tareas · 2 Proyectos · 3 Clientes · 4 Cobros · 5 Notas · 6 Calendario`.
 La vista principal es Tareas. Abajo, la barra de estado muestra el filtro y
 los atajos de la vista actual.
 
@@ -76,6 +76,17 @@ proyecto (o "sin proyecto"), `/` busca y `esc` limpia los filtros. Desde
 Proyectos, `o` abre las notas del proyecto seleccionado. Las etiquetas se
 escriben separadas por espacio o coma y se guardan en minúsculas.
 
+### Calendario
+
+Cuadrícula del mes a la izquierda y agenda a la derecha. Junta, por fecha, los
+eventos, las tareas con fecha límite, las cuotas por cobrar y el inicio y la
+entrega de cada proyecto. `←`/`→` mueven un día, `↑`/`↓` una semana, `[`/`]`
+un mes y `t` vuelve a hoy. `v` cambia la agenda entre mes, semana y día, y
+`tab` recorre las entradas del día. `n` crea un evento en el día seleccionado
+(hora, proyecto y cliente son opcionales); `e` lo edita y `d` lo borra. En una
+tarea, cobro o proyecto, `enter` lleva a su vista; `espacio` marca la tarea
+hecha y `x` el cobro pagado.
+
 ## Paleta de comandos
 
 `ctrl+k` o `:` abre la paleta. Busca comandos, clientes, proyectos y tareas, o
@@ -87,11 +98,13 @@ c Juan Pérez #Acme
 p Sitio web @acme $5000 usd ^2026-12-20
 $ 2500 @web-acme ^15/12
 n Idea para el home @web-acme #idea #diseño
+e Reunión de avance @web-acme ^viernes 15:30
 ```
 
 - `@` proyecto (o cliente, al crear un proyecto), con búsqueda difusa; usa
   guiones para nombres con espacios (`@web-acme`).
-- `#` empresa del cliente; en una nota, cada `#palabra` es una etiqueta.
+- `#` empresa del cliente; en una nota, cada `#palabra` es una etiqueta; en un evento, `#tipo`
+  (`#llamada`, `#presentacion`, `#lanzamiento`). Sin `#tipo` se deduce del título.
 - `!baja|media|alta|urgente`.
 - `^fecha`: `hoy`, `mañana`, `lun`…`dom`, `+3d`, `+2s`, `15/12`,
   `2026-12-15`.

@@ -19,7 +19,7 @@ J=$TMP/jar
 [ "$(code $U/)" = 303 ] || fail "sin login debe redirigir"
 [ "$(code -d password=mal $U/login)" = 401 ] || fail "login malo"
 [ "$(code -c $J -d password=pw $U/login)" = 303 ] || fail "login"
-for p in / /tasks /projects /projects/1 /clients /clients/1 /payments /tasks/new /projects/new /payments/new /clients/new /tasks/1/edit /static/app.css /notes /notes/new '/notes?project_id=none&tag=idea&q=x'; do
+for p in / /tasks /projects /projects/1 /clients /clients/1 /payments /tasks/new /projects/new /payments/new /clients/new /tasks/1/edit /static/app.css /notes /notes/new '/notes?project_id=none&tag=idea&q=x' /calendar '/calendar?view=semana&date=2026-12-01' '/calendar?view=dia&date=2026-12-01' '/calendar?view=mes&date=2027-02-28' '/events/new?date=2026-12-01&project_id=1'; do
   [ "$(code -b $J $U$p)" = 200 ] || fail "GET $p"
 done
 [ "$(code -b $J $U/projects/999)" = 404 ] || fail "404 proyecto"
@@ -50,4 +50,20 @@ done
 curl -s -H 'Authorization: Bearer secreto' "$U/api/notes?project_id=none&search=zzw" | grep -q '"project_id":null' || fail "la nota debió quedar sin proyecto"
 [ "$(code -b $J --data-urlencode "_csrf=$CSRF" -d 'next=/notes' $U/notes/$NID/delete)" = 303 ] || fail "borrar nota"
 [ "$(code -H 'Authorization: Bearer secreto' $U/api/notes/$NID)" = 404 ] || fail "la nota sigue existiendo"
+# Calendario: evento con hora y proyecto, visible en la agenda junto a la cuota; editar y borrar.
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" -d 'title=x&date=2026-12-01&time=99:99' $U/events)" = 422 ] || fail "hora inválida"
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" --data-urlencode 'title=Reunión web zzc' -d 'kind=reunion&date=2026-12-01&time=9:30&project_id=1' $U/events)" = 303 ] || fail "crear evento"
+AG=$(curl -s -H 'Authorization: Bearer secreto' "$U/api/agenda?from=2026-12-01&to=2026-12-01")
+echo "$AG" | grep -q '"time":"09:30","type":"event","kind":"reunion"' || fail "el evento no está en la agenda: $AG"
+echo "$AG" | grep -q '"type":"payment"' || fail "la cuota por cobrar no está en la agenda: $AG"
+[ "$(code -H 'Authorization: Bearer secreto' "$U/api/agenda?from=2026-12-01")" = 400 ] || fail "agenda sin rango"
+EID=$(curl -s -H 'Authorization: Bearer secreto' "$U/api/events?from=2026-12-01&to=2026-12-01" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+curl -s -b $J "$U/calendar?view=dia&date=2026-12-01" | grep -q 'Reunión web zzc' || fail "el evento no aparece en el calendario web"
+for p in "/events/$EID/edit" /projects/1 "/calendar?view=mes&date=2026-12-01"; do
+  [ "$(code -b $J "$U$p")" = 200 ] || fail "GET $p"
+done
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" --data-urlencode 'title=Reunión movida' -d 'kind=otro&date=2026-12-02&time=&project_id=' $U/events/$EID)" = 303 ] || fail "editar evento"
+curl -s -H 'Authorization: Bearer secreto' "$U/api/events/$EID" | grep -q '"date":"2026-12-02","time":null,"project_id":null' || fail "el evento no se actualizó"
+[ "$(code -b $J --data-urlencode "_csrf=$CSRF" $U/events/$EID/delete)" = 303 ] || fail "borrar evento"
+[ "$(code -H 'Authorization: Bearer secreto' $U/api/events/$EID)" = 404 ] || fail "el evento sigue existiendo"
 echo "OK"

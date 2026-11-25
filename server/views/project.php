@@ -15,6 +15,10 @@
   <?= View::partial('_payment_rows', ['items' => $payments, 'today' => $today, 'url' => $url, 'csrf' => $csrf]) ?>
 </section>
 <section>
+  <div class="sec-head"><h2>Calendario</h2><a class="btn small" href="/events/new?project_id=<?= $p['id'] ?>&next=/projects/<?= $p['id'] ?>">+ Evento</a></div>
+  <?php if ($agenda): ?><?= View::partial('_agenda_rows', ['items' => $agenda, 'today' => $today, 'url' => $url, 'csrf' => $csrf, 'dated' => true]) ?><?php else: ?><p class="empty">Sin eventos próximos.</p><?php endif ?>
+</section>
+<section>
   <div class="sec-head"><h2>Notas</h2><a class="btn small" href="/notes/new?project_id=<?= $p['id'] ?>&next=/projects/<?= $p['id'] ?>">+ Nota</a></div>
   <?= View::partial('_note_rows', ['items' => $notes, 'today' => $today, 'url' => $url, 'csrf' => $csrf]) ?>
 </section>

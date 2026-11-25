@@ -380,3 +380,70 @@ func TestNotes(t *testing.T) {
 		t.Fatalf("Snapshot.Notes: %v %d", err, len(snap.Notes))
 	}
 }
+
+func TestEvents(t *testing.T) {
+	s := newTestStore(t)
+	c := mustClient(t, s, "Ana")
+	p := mustProject(t, s, c.ID, BillingTotal)
+
+	for _, bad := range []Event{
+		{Title: " ", Date: "2026-11-20"},
+		{Title: "x", Date: "20/11/2026"},
+		{Title: "x", Date: "2026-11-20", Time: ptr("25:00")},
+	} {
+		if err := s.CreateEvent(&bad); err == nil {
+			t.Fatalf("debió rechazarse: %+v", bad)
+		}
+	}
+	e := Event{Title: "Kickoff", Kind: "raro", Date: "2026-11-20", Time: ptr("9:05"), ProjectID: &p.ID}
+	if err := s.CreateEvent(&e); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetEvent(e.ID)
+	if err != nil || got.Kind != EventOtro || got.Time == nil || *got.Time != "09:05" || got.ProjectName != p.Name || got.ClientName != "Ana" {
+		t.Fatalf("GetEvent: %v %+v", err, got)
+	}
+	allDay := Event{Title: "Lanzamiento", Kind: EventLanzamiento, Date: "2026-11-20", ClientID: &c.ID}
+	if err := s.CreateEvent(&allDay); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateEvent(&Event{Title: "Otro mes", Date: "2026-12-01"}); err != nil {
+		t.Fatal(err)
+	}
+	// Dentro del día: todo el día primero, luego por hora.
+	list, err := s.ListEvents("2026-11-01", "2026-11-30")
+	if err != nil || len(list) != 2 || list[0].ID != allDay.ID || list[1].ID != e.ID {
+		t.Fatalf("ListEvents: %v %+v", err, list)
+	}
+	if all, _ := s.ListEvents("", ""); len(all) != 3 {
+		t.Fatalf("ListEvents sin rango = %d", len(all))
+	}
+
+	e.Time, e.Title = nil, "Kickoff movido"
+	if err := s.UpdateEvent(&e); err != nil {
+		t.Fatal(err)
+	}
+	// Borrar el proyecto conserva el evento.
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetEvent(e.ID); err != nil || got.ProjectID != nil || got.Time != nil || got.Title != "Kickoff movido" {
+		t.Fatalf("evento tras borrar el proyecto: %v %+v", err, got)
+	}
+	// Borrar el cliente (ya sin proyectos) también lo conserva.
+	if err := s.DeleteClient(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetEvent(allDay.ID); err != nil || got.ClientID != nil || got.ClientName != "" {
+		t.Fatalf("evento tras borrar el cliente: %v %+v", err, got)
+	}
+	if err := s.DeleteEvent(e.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetEvent(e.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetEvent tras borrar: %v", err)
+	}
+	if snap, err := s.Snapshot(); err != nil || len(snap.Events) != 2 {
+		t.Fatalf("Snapshot.Events: %v", err)
+	}
+}

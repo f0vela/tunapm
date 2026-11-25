@@ -40,11 +40,21 @@
   <?= $content ?>
 </main>
 <?php if ($nav !== ''): ?>
+<?php $tab = fn (string $k, string $href, string $label) => '<a href="' . $href . '"' . ($nav === $k ? ' class="on"' : '') . '>' . $label . '</a>'; ?>
+<input type="checkbox" id="nav-more" class="nav-toggle" aria-label="Más secciones">
 <nav class="tabs">
-  <?php foreach ([['inicio', '/', 'Inicio'], ['tareas', '/tasks', 'Tareas'], ['proyectos', '/projects', 'Proyectos'], ['cuotas', '/payments', 'Cuotas'], ['clientes', '/clients', 'Clientes'], ['notas', '/notes', 'Notas']] as [$k, $href, $label]): ?>
-    <a href="<?= $href ?>"<?= $nav === $k ? ' class="on"' : '' ?>><?= $label ?></a>
-  <?php endforeach ?>
+  <?= $tab('tareas', '/tasks', 'Tareas') ?>
+  <?= $tab('proyectos', '/projects', 'Proyectos') ?>
+  <?= $tab('calendario', '/calendar', 'Calendario') ?>
+  <?= $tab('notas', '/notes', 'Notas') ?>
+  <label for="nav-more" class="more<?= in_array($nav, ['inicio', 'cuotas', 'clientes'], true) ? ' on' : '' ?>">Más</label>
+  <div class="extra">
+    <?= $tab('inicio', '/', 'Inicio') ?>
+    <?= $tab('cuotas', '/payments', 'Cuotas') ?>
+    <?= $tab('clientes', '/clients', 'Clientes') ?>
+  </div>
 </nav>
+<label for="nav-more" class="nav-scrim" aria-hidden="true"></label>
 <?php endif ?>
 </body>
 </html>

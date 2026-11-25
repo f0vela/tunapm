@@ -311,6 +311,13 @@ func (a *App) openFormFromDraft(d quickadd.Draft) {
 			clientID = client.ID
 		}
 		a.openProjectForm(project, d.Date, clientID)
+	case quickadd.KindEvent:
+		ev, _ := eventFromDraft(a, d)
+		ev.ProjectID = a.contextProjectRef()
+		if proj := resolveProject(a.projects.projects, d.Target); proj != nil {
+			ev.ProjectID = &proj.ID
+		}
+		a.openEventForm(ev)
 	case quickadd.KindNote:
 		note := store.Note{Title: d.Title, Tags: store.ParseTags(d.Tags), ProjectID: a.contextProjectRef()}
 		if proj := resolveProject(a.projects.projects, d.Target); proj != nil {

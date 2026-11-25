@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"tunapm/internal/agenda"
+	"tunapm/internal/dates"
 	"tunapm/internal/store"
 )
 
@@ -139,6 +142,26 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/notes/{id}", update(s.repo.UpdateNote, func(n *store.Note, id int64) { n.ID = id }))
 	m.HandleFunc("DELETE /api/notes/{id}", del(s.repo.DeleteNote))
 
+	m.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) {
+		out, err := s.repo.ListEvents(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+		respond(w, 200, nonNil(out), err)
+	})
+	m.HandleFunc("POST /api/events", create(s.repo.CreateEvent))
+	m.HandleFunc("GET /api/events/{id}", get(s.repo.GetEvent))
+	m.HandleFunc("PUT /api/events/{id}", update(s.repo.UpdateEvent, func(e *store.Event, id int64) { e.ID = id }))
+	m.HandleFunc("DELETE /api/events/{id}", del(s.repo.DeleteEvent))
+
+	// Calendario: tareas, cuotas por cobrar, fechas de proyectos y eventos en un rango.
+	m.HandleFunc("GET /api/agenda", func(w http.ResponseWriter, r *http.Request) {
+		from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
+		if !validDate(from) || !validDate(to) {
+			writeErr(w, 400, CodeBadRequest, "from y to son obligatorios (YYYY-MM-DD)")
+			return
+		}
+		out, err := agenda.Build(s.repo, from, to, dates.Today())
+		respond(w, 200, out, err)
+	})
+
 	m.HandleFunc("GET /api/payments", list(s.repo.ListPayments))
 	m.HandleFunc("POST /api/payments", create(s.repo.CreatePayment))
 	m.HandleFunc("GET /api/payments/{id}", get(s.repo.GetPayment))
@@ -260,6 +283,11 @@ func del(fn func(int64) error) http.HandlerFunc {
 
 // --- helpers ---
 
+func validDate(s string) bool {
+	_, err := time.Parse("2006-01-02", s)
+	return err == nil
+}
+
 func nonNil[T any](s []T) []T {
 	if s == nil {
 		return []T{}
@@ -303,7 +331,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, 409, CodeTotalOneQuote, err.Error())
 	case errors.Is(err, store.ErrInvalidAmount):
 		writeErr(w, 422, CodeInvalidAmount, err.Error())
-	case errors.Is(err, store.ErrNoteTitle):
+	case errors.Is(err, store.ErrNoteTitle), errors.Is(err, store.ErrEventTitle),
+		errors.Is(err, store.ErrEventDate), errors.Is(err, store.ErrEventTime):
 		writeErr(w, 422, CodeBadRequest, err.Error())
 	case strings.Contains(err.Error(), "constraint failed"):
 		// CHECK / FOREIGN KEY / NOT NULL de SQLite: datos inválidos del cliente.

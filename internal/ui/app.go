@@ -23,7 +23,7 @@ var keys = keyMap{
 	Quit:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "salir")),
 	Palette: key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("ctrl+k", "paleta")),
 	Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "ayuda")),
-	Tabs:    key.NewBinding(key.WithKeys("1", "2", "3", "4", "5"), key.WithHelp("1-5", "vistas")),
+	Tabs:    key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6"), key.WithHelp("1-6", "vistas")),
 }
 
 const (
@@ -32,6 +32,7 @@ const (
 	tabClients
 	tabPayments
 	tabNotes
+	tabCalendar
 )
 
 // Syncer lo implementa la caché local (internal/cache): avisa de cambios hechos por la
@@ -62,12 +63,14 @@ type App struct {
 	clients  *Clients
 	payments *Payments
 	notes    *Notes
+	calendar *Calendar
 
 	palette *Palette
 	picker  *Picker
 	confirm *Confirm
 	detail  *Detail
 	help    bool
+	helpOff int // desplazamiento de la ayuda cuando no cabe
 
 	form     *huh.Form
 	formSave func() error
@@ -85,6 +88,7 @@ func NewApp(st store.Repo) *App {
 	a.clients = newClients(st)
 	a.payments = newPayments(st)
 	a.notes = newNotes(st)
+	a.calendar = newCalendar(st)
 	a.syncer, _ = st.(Syncer)
 	a.layout()
 	return a
@@ -170,7 +174,17 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if a.help {
 		switch msg.String() {
 		case "esc", "?", "q":
-			a.help = false
+			a.help, a.helpOff = false, 0
+		case "j", "down":
+			a.helpOff++
+		case "k", "up":
+			a.helpOff--
+		case " ", "pgdown":
+			a.helpOff += max(a.height-12, 1)
+		case "b", "pgup":
+			a.helpOff -= max(a.height-12, 1)
+		case "g", "home":
+			a.helpOff = 0
 		}
 		return nil
 	}
@@ -204,6 +218,8 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 		a.setTab(tabPayments)
 	case msg.String() == "5":
 		a.setTab(tabNotes)
+	case msg.String() == "6":
+		a.setTab(tabCalendar)
 	default:
 		switch a.tab {
 		case tabTasks:
@@ -216,6 +232,8 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 			a.payments.handleKey(a, msg)
 		case tabNotes:
 			a.notes.handleKey(a, msg)
+		case tabCalendar:
+			a.calendar.handleKey(a, msg)
 		}
 	}
 	return nil
@@ -239,6 +257,7 @@ func (a *App) layout() {
 	a.clients.layout(a.width, bodyH)
 	a.payments.layout(a.width, bodyH)
 	a.notes.layout(a.width, bodyH)
+	a.calendar.layout(a.width, bodyH)
 	if a.palette != nil {
 		a.palette.layout(a.width, bodyH)
 	}
@@ -253,6 +272,7 @@ func (a *App) reloadAll() {
 	a.clients.reload()
 	a.payments.reload()
 	a.notes.reload()
+	a.calendar.reload()
 }
 
 func (a *App) View() string {
@@ -293,7 +313,7 @@ func (a *App) View() string {
 const minWidth, minHeight = 50, 10
 
 func (a *App) tabsView() string {
-	labels := []string{"1 Tareas", "2 Proyectos", "3 Clientes", "4 Cobros", "5 Notas"}
+	labels := []string{"1 Tareas", "2 Proyectos", "3 Clientes", "4 Cobros", "5 Notas", "6 Calendario"}
 	var b strings.Builder
 	for i, label := range labels {
 		style := tabInactiveStyle
@@ -358,6 +378,8 @@ func (a *App) activeView() string {
 		return a.payments.view()
 	case tabNotes:
 		return a.notes.view()
+	case tabCalendar:
+		return a.calendar.view()
 	default:
 		return a.tasks.view()
 	}
@@ -406,6 +428,8 @@ func (a *App) activeHints() string {
 		return a.payments.hints()
 	case tabNotes:
 		return a.notes.hints()
+	case tabCalendar:
+		return a.calendar.hints()
 	default:
 		return a.tasks.hints()
 	}
@@ -421,6 +445,8 @@ func (a *App) activeInfo() string {
 		return a.payments.info()
 	case tabNotes:
 		return a.notes.info()
+	case tabCalendar:
+		return a.calendar.info()
 	default:
 		return a.tasks.info()
 	}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"tunapm/internal/agenda"
 	"tunapm/internal/api"
 	"tunapm/internal/store"
 )
@@ -283,5 +284,35 @@ func (c *Client) ListNotes(f store.NoteFilter) (v []store.Note, err error) {
 }
 func (c *Client) NoteTags() (v []store.TagCount, err error) {
 	err = c.do("GET", "/api/notes/tags", nil, &v)
+	return
+}
+
+// --- events ---
+
+func (c *Client) CreateEvent(v *store.Event) error { return c.do("POST", "/api/events", v, v) }
+func (c *Client) UpdateEvent(v *store.Event) error {
+	return c.do("PUT", "/api/events/"+id(v.ID), v, v)
+}
+func (c *Client) DeleteEvent(n int64) error { return c.do("DELETE", "/api/events/"+id(n), nil, nil) }
+func (c *Client) GetEvent(n int64) (v store.Event, err error) {
+	err = c.do("GET", "/api/events/"+id(n), nil, &v)
+	return
+}
+func (c *Client) ListEvents(from, to string) (v []store.Event, err error) {
+	q := url.Values{}
+	if from != "" {
+		q.Set("from", from)
+	}
+	if to != "" {
+		q.Set("to", to)
+	}
+	err = c.do("GET", "/api/events?"+q.Encode(), nil, &v)
+	return
+}
+
+// Agenda pide el calendario ya armado por el servidor (la TUI lo arma en local).
+func (c *Client) Agenda(from, to string) (v []agenda.Item, err error) {
+	q := url.Values{"from": {from}, "to": {to}}
+	err = c.do("GET", "/api/agenda?"+q.Encode(), nil, &v)
 	return
 }
