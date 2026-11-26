@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -142,7 +143,7 @@ func (p *Projects) summaryLine() string {
 
 func (p *Projects) listView(width, height int) string {
 	var lines []string
-	const statusW, tasksW, owedW, dueW = 10, 5, 12, 7
+	const statusW, tasksW, owedW, dueW = 10, 5, 12, 8
 	nameW := max(width-2-statusW-tasksW-owedW-dueW-4, 8)
 	lines = append(lines, headStyle.Render(padRight("  PROYECTO", 2+nameW)+" "+padRight("ESTADO", statusW)+" "+
 		padLeft("PEND.", tasksW)+" "+padLeft("POR COBRAR", owedW)+" "+padLeft("ENTREGA", dueW)))
@@ -192,9 +193,9 @@ func (p *Projects) listView(width, height int) string {
 		}
 		due := mutedStyle.Render("-")
 		if proj.DueDate != nil {
-			due = dueStyle(*proj.DueDate, today).Render(dates.Human(*proj.DueDate, today))
+			due = dueStyle(*proj.DueDate, today).Render(dates.Short(*proj.DueDate, today))
 			if closed {
-				due = mutedStyle.Render(dates.Human(*proj.DueDate, today))
+				due = mutedStyle.Render(dates.Short(*proj.DueDate, today))
 			}
 		}
 		line := marker + padRight(name, nameW) + " " + padRight(projectStatusText(proj.Status), statusW) + " " +
@@ -311,38 +312,35 @@ func (p *Projects) info() string {
 	return info
 }
 
-func (p *Projects) hints() string {
-	return "n nuevo · e editar · S estado · c cuota · x pagar · enter tareas · ctrl+k paleta"
-}
-
 func (p *Projects) handleKey(a *App, msg tea.KeyMsg) {
+	p.syncKeys()
 	proj := p.selectedProject()
-	switch msg.String() {
-	case "j", "down":
+	switch {
+	case key.Matches(msg, projectKeys.Down):
 		if len(p.projects) > 0 {
 			idx := min(p.selectedIndex()+1, len(p.projects)-1)
 			p.selectByID(p.projects[idx].ID)
 		}
-	case "k", "up":
+	case key.Matches(msg, projectKeys.Up):
 		if len(p.projects) > 0 {
 			idx := max(p.selectedIndex()-1, 0)
 			p.selectByID(p.projects[idx].ID)
 		}
-	case "n":
+	case key.Matches(msg, projectKeys.New):
 		a.openProjectForm(store.Project{}, "", 0)
-	case "e":
+	case key.Matches(msg, projectKeys.Edit):
 		if proj != nil {
 			a.openProjectForm(*proj, "", 0)
 		}
-	case "S":
+	case key.Matches(msg, projectKeys.Status):
 		if proj != nil {
 			a.openProjectStatusPicker(proj.ID)
 		}
-	case "c":
+	case key.Matches(msg, projectKeys.AddPayment):
 		if proj != nil {
 			a.openPaymentForm(store.Payment{ProjectID: proj.ID}, "", proj.ID)
 		}
-	case "x":
+	case key.Matches(msg, projectKeys.Pay):
 		if proj == nil {
 			return
 		}
@@ -353,12 +351,12 @@ func (p *Projects) handleKey(a *App, msg tea.KeyMsg) {
 			}
 		}
 		a.toastf("No hay cuotas pendientes en %s", proj.Name)
-	case "o":
+	case key.Matches(msg, projectKeys.Notes):
 		if proj != nil {
 			a.notes.showProject(*proj)
 			a.setTab(tabNotes)
 		}
-	case "enter":
+	case key.Matches(msg, projectKeys.Tasks):
 		if proj == nil {
 			return
 		}
@@ -368,7 +366,7 @@ func (p *Projects) handleKey(a *App, msg tea.KeyMsg) {
 		a.tasks.filterLabel = "proyecto: " + proj.Name
 		a.tasks.reload()
 		a.setTab(tabTasks)
-	case "d":
+	case key.Matches(msg, projectKeys.Delete):
 		if proj == nil {
 			return
 		}

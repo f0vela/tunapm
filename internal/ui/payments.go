@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"sort"
 	"strings"
 	"time"
@@ -269,23 +270,20 @@ func (p *Payments) info() string {
 	return fmt.Sprintf("Cobros · %d por cobrar · %d %s", pending, overdue, word)
 }
 
-func (p *Payments) hints() string {
-	return "j/k mover · x marcar pagada · u deshacer pago · ctrl+k paleta"
-}
-
 func (p *Payments) handleKey(a *App, msg tea.KeyMsg) {
-	switch msg.String() {
-	case "j", "down":
+	p.shortHelp() // actualiza qué atajos aplican
+	switch {
+	case key.Matches(msg, paymentKeys.Down):
 		if next := p.nextPayment(p.cursor+1, 1); next >= 0 {
 			p.cursor = next
 		}
 		p.syncSelection()
-	case "k", "up":
+	case key.Matches(msg, paymentKeys.Up):
 		if prev := p.prevPayment(p.cursor-1, -1); prev >= 0 {
 			p.cursor = prev
 		}
 		p.syncSelection()
-	case "x":
+	case key.Matches(msg, paymentKeys.Pay):
 		if pay := p.selected(); pay != nil {
 			if pay.PaidDate != nil {
 				a.toastf("Esa cuota ya está pagada (u para deshacer el pago)")
@@ -293,7 +291,7 @@ func (p *Payments) handleKey(a *App, msg tea.KeyMsg) {
 			}
 			a.openPaidDateForm(*pay)
 		}
-	case "u":
+	case key.Matches(msg, paymentKeys.Unpay):
 		if pay := p.selected(); pay != nil {
 			if pay.PaidDate == nil {
 				a.toastf("Esa cuota no está pagada")

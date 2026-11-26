@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -231,10 +232,6 @@ func (t *Tasks) info() string {
 	return strings.Join(parts, " · ")
 }
 
-func (t *Tasks) hints() string {
-	return "n nueva · espacio hecha · e editar · / buscar · f filtrar · ctrl+k paleta"
-}
-
 func (t *Tasks) selectByID(id int64) bool {
 	for i := range t.tasks {
 		if t.tasks[i].ID == id {
@@ -264,6 +261,7 @@ func (t *Tasks) move(delta int) {
 }
 
 func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
+	t.syncKeys()
 	if t.searching {
 		switch msg.String() {
 		case "esc":
@@ -282,8 +280,8 @@ func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
 		return
 	}
 
-	switch msg.String() {
-	case "tab":
+	switch {
+	case key.Matches(msg, taskKeys.CycleShowMode):
 		switch t.mode {
 		case store.FilterOpen:
 			t.mode = store.FilterAll
@@ -293,34 +291,34 @@ func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
 			t.mode = store.FilterOpen
 		}
 		t.reload()
-	case "o", "a", "h":
+	case key.Matches(msg, taskKeys.ShowOpen, taskKeys.ShowAll, taskKeys.ShowDone):
 		t.mode = map[string]string{"o": store.FilterOpen, "a": store.FilterAll, "h": store.FilterDone}[msg.String()]
 		t.reload()
-	case "/":
+	case key.Matches(msg, taskKeys.Search):
 		t.searching = true
 		t.searchInput.Focus()
-	case "f":
+	case key.Matches(msg, taskKeys.Filter):
 		a.openFilterPicker()
-	case "esc":
+	case key.Matches(msg, taskKeys.Clear):
 		t.mode, t.search, t.filterLabel = store.FilterOpen, "", ""
 		t.projectFilter, t.clientFilter = nil, nil
 		t.searchInput.SetValue("")
 		t.reload()
-	case "n":
+	case key.Matches(msg, taskKeys.New):
 		var preset int64
 		if t.projectFilter != nil {
 			preset = *t.projectFilter
 		}
 		a.openTaskForm(store.Task{}, "", preset)
-	case "e":
+	case key.Matches(msg, taskKeys.Edit):
 		if task := t.selected(); task != nil {
 			a.openTaskForm(*task, strOr(task.DueDate, ""), 0)
 		}
-	case "enter":
+	case key.Matches(msg, taskKeys.Open):
 		if task := t.selected(); task != nil {
 			a.detail = taskDetail(*task)
 		}
-	case "d":
+	case key.Matches(msg, taskKeys.Delete):
 		if task := t.selected(); task != nil {
 			id, title := task.ID, task.Title
 			a.confirmAction(fmt.Sprintf("¿Borrar la tarea %q?", title), func(a *App) {
@@ -332,7 +330,7 @@ func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
 				a.reloadAll()
 			})
 		}
-	case " ":
+	case key.Matches(msg, taskKeys.Toggle):
 		if task := t.selected(); task != nil {
 			if task.Status == store.TaskHecho {
 				task.Status = store.TaskPendiente
@@ -341,38 +339,38 @@ func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
 			}
 			t.save(a, *task, "Tarea actualizada")
 		}
-	case "s":
+	case key.Matches(msg, taskKeys.Status):
 		if task := t.selected(); task != nil {
 			task.Status = nextTaskStatus(task.Status)
 			t.save(a, *task, "Estado: "+taskStatusLabels[task.Status])
 		}
-	case "+", "=":
+	case key.Matches(msg, taskKeys.PrioUp):
 		if task := t.selected(); task != nil && task.Priority < 3 {
 			task.Priority++
 			t.save(a, *task, "Prioridad: "+priorityLabels[task.Priority])
 		}
-	case "-":
+	case key.Matches(msg, taskKeys.PrioDown):
 		if task := t.selected(); task != nil && task.Priority > 0 {
 			task.Priority--
 			t.save(a, *task, "Prioridad: "+priorityLabels[task.Priority])
 		}
-	case "g":
+	case key.Matches(msg, taskKeys.GoProject):
 		if task := t.selected(); task != nil {
 			if a.projects.selectByID(task.ProjectID) {
 				a.setTab(tabProjects)
 			}
 		}
-	case "j", "down":
+	case key.Matches(msg, taskKeys.Down):
 		t.move(1)
-	case "k", "up":
+	case key.Matches(msg, taskKeys.Up):
 		t.move(-1)
-	case "pgdown":
+	case key.Matches(msg, taskKeys.PageDown):
 		t.move(t.listHeight() - 1)
-	case "pgup":
+	case key.Matches(msg, taskKeys.PageUp):
 		t.move(-(t.listHeight() - 1))
-	case "home":
+	case key.Matches(msg, taskKeys.Top):
 		t.move(-len(t.tasks))
-	case "end":
+	case key.Matches(msg, taskKeys.Bottom):
 		t.move(len(t.tasks))
 	}
 }
@@ -398,7 +396,7 @@ func nextTaskStatus(status string) string {
 	}
 }
 
-func taskDetail(task store.Task) *Detail {
+func taskDetail(task store.Task) *Reader {
 	lines := []string{
 		mutedStyle.Render("Estado: ") + statusText(task.Status),
 		mutedStyle.Render("Prioridad: ") + priorityText(task.Priority),
@@ -418,7 +416,7 @@ func taskDetail(task store.Task) *Detail {
 	if task.Notes != "" {
 		lines = append(lines, "", sectionStyle.Render("Notas"), task.Notes)
 	}
-	return &Detail{title: task.Title, lines: lines}
+	return newReader(task.Title, lines)
 }
 
 func (t *Tasks) emptyHint() string {

@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -202,30 +203,27 @@ func (c *Clients) info() string {
 	return info
 }
 
-func (c *Clients) hints() string {
-	return "n nuevo · e editar · d borrar · enter tareas · ctrl+k paleta"
-}
-
 func (c *Clients) handleKey(a *App, msg tea.KeyMsg) {
+	c.shortHelp() // actualiza qué atajos aplican
 	client := c.selectedClient()
-	switch msg.String() {
-	case "j", "down":
+	switch {
+	case key.Matches(msg, clientKeys.Down):
 		if len(c.clients) > 0 {
 			idx := min(c.selectedIndex()+1, len(c.clients)-1)
 			c.selectByID(c.clients[idx].ID)
 		}
-	case "k", "up":
+	case key.Matches(msg, clientKeys.Up):
 		if len(c.clients) > 0 {
 			idx := max(c.selectedIndex()-1, 0)
 			c.selectByID(c.clients[idx].ID)
 		}
-	case "n":
+	case key.Matches(msg, clientKeys.New):
 		a.openClientForm(store.Client{})
-	case "e":
+	case key.Matches(msg, clientKeys.Edit):
 		if client != nil {
 			a.openClientForm(*client)
 		}
-	case "d":
+	case key.Matches(msg, clientKeys.Delete):
 		if client == nil {
 			return
 		}
@@ -243,7 +241,7 @@ func (c *Clients) handleKey(a *App, msg tea.KeyMsg) {
 			a.toastf("Cliente borrado")
 			a.reloadAll()
 		})
-	case "enter":
+	case key.Matches(msg, clientKeys.Tasks):
 		if client == nil {
 			return
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 
+	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
 	"tunapm/internal/money"
 	"tunapm/internal/quickadd"
@@ -58,10 +59,12 @@ func (a *App) openTaskForm(t store.Task, dueRaw string, presetProject int64) {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().Title("Título").Value(&title).Validate(huh.ValidateNotEmpty()),
-			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Height(6).Value(&projectID),
-			huh.NewSelect[string]().Title("Estado").Options(statusOpts...).Value(&status),
-			huh.NewSelect[int]().Title("Prioridad").Options(priorityOpts...).Value(&priority),
+			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Height(6).Value(&projectID).
+				Description(searchHint(len(projectOpts))),
+			huh.NewSelect[string]().Title("Estado").Options(statusOpts...).Value(&status).Inline(true),
+			huh.NewSelect[int]().Title("Prioridad").Options(priorityOpts...).Value(&priority).Inline(true),
 			huh.NewInput().Title("Vence").Placeholder("2026-12-15, mañana, viernes, +3d").Value(&dueRaw).
+				DescriptionFunc(datePreviewFunc(&dueRaw, "sin fecha límite"), &dueRaw).
 				Validate(validateDate),
 			huh.NewText().Title("Notas").Value(&notes).Lines(4),
 		),
@@ -170,16 +173,19 @@ func (a *App) openProjectForm(p store.Project, dueRaw string, presetClient int64
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().Title("Nombre").Value(&name).Validate(huh.ValidateNotEmpty()),
-			huh.NewSelect[int64]().Title("Cliente").Options(clientOpts...).Height(6).Value(&clientID),
-			huh.NewSelect[string]().Title("Estado").Options(statusOpts...).Value(&status),
+			huh.NewSelect[int64]().Title("Cliente").Options(clientOpts...).Height(6).Value(&clientID).
+				Description(searchHint(len(clientOpts))),
+			huh.NewSelect[string]().Title("Estado").Options(statusOpts...).Value(&status).Inline(true),
 			huh.NewText().Title("Descripción").Value(&description).Lines(3),
 		).Title("Datos del proyecto"),
 		huh.NewGroup(
-			huh.NewInput().Title("Inicio").Placeholder("hoy, 15/12, +3d").Value(&startRaw).Validate(validateDate),
-			huh.NewInput().Title("Entrega").Placeholder("2026-12-20").Value(&dueRaw).Validate(validateDate),
+			huh.NewInput().Title("Inicio").Placeholder("hoy, 15/12, +3d").Value(&startRaw).Validate(validateDate).
+				DescriptionFunc(datePreviewFunc(&startRaw, "sin fecha de inicio"), &startRaw),
+			huh.NewInput().Title("Entrega").Placeholder("2026-12-20").Value(&dueRaw).Validate(validateDate).
+				DescriptionFunc(datePreviewFunc(&dueRaw, "sin fecha de entrega"), &dueRaw),
 			huh.NewInput().Title("Presupuesto").Placeholder("5000").Value(&budgetRaw).Validate(validateMoney),
-			huh.NewSelect[string]().Title("Moneda").Options(currencyOpts...).Value(&currency),
-			huh.NewSelect[string]().Title("Cobro").Options(billingOpts...).Value(&billing),
+			huh.NewSelect[string]().Title("Moneda").Options(currencyOpts...).Value(&currency).Inline(true),
+			huh.NewSelect[string]().Title("Cobro").Options(billingOpts...).Value(&billing).Inline(true),
 		).Title("Fechas y cobro"),
 	)
 
@@ -241,10 +247,12 @@ func (a *App) openPaymentForm(p store.Payment, scheduledRaw string, presetProjec
 
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Height(6).Value(&projectID),
+			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Height(6).Value(&projectID).
+				Description(searchHint(len(projectOpts))),
 			huh.NewInput().Title("Monto").Placeholder("2500").Value(&amountRaw).
 				Validate(validateMoney).Validate(huh.ValidateNotEmpty()),
-			huh.NewInput().Title("Fecha programada").Value(&scheduledRaw).Validate(validateDate),
+			huh.NewInput().Title("Fecha programada").Value(&scheduledRaw).Validate(validateDate).
+				DescriptionFunc(datePreviewFunc(&scheduledRaw, "hoy"), &scheduledRaw),
 			huh.NewInput().Title("Notas").Value(&notes),
 		),
 	)
@@ -272,7 +280,8 @@ func (a *App) openPaidDateForm(p store.Payment) {
 	date := dates.Today()
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewInput().Title("Fecha de pago").Value(&date).Validate(validateDate),
+			huh.NewInput().Title("Fecha de pago").Value(&date).Validate(validateDate).
+				DescriptionFunc(datePreviewFunc(&date, "hoy"), &date),
 		),
 	)
 	a.openForm(form, func() error {
@@ -385,3 +394,27 @@ func parseOptionalMoney(raw string) (int64, error) {
 }
 
 func nowTime() time.Time { return time.Now() }
+
+// datePreviewFunc muestra, mientras se escribe, cómo se interpreta una fecha:
+// "viernes" → "viernes 27 de noviembre 2026". empty describe el campo vacío.
+func datePreviewFunc(raw *string, empty string) func() string {
+	return func() string {
+		text := strings.TrimSpace(*raw)
+		if text == "" {
+			return "Vacío: " + empty
+		}
+		date, err := parseDateFor(text)
+		if err != nil {
+			return "No reconozco la fecha. Prueba: hoy, mañana, viernes, +3d, 15/12"
+		}
+		return "→ " + agenda.DayTitle(date) + " " + date[:4]
+	}
+}
+
+// searchHint recuerda que las listas largas se filtran escribiendo "/".
+func searchHint(options int) string {
+	if options > 6 {
+		return "/ para buscar"
+	}
+	return ""
+}

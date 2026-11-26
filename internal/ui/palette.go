@@ -93,7 +93,7 @@ func (p *Palette) buildItems() []paletteItem {
 			a.openFilterPicker()
 		}},
 		{kind: "cmd", label: "Cambiar tema de colores", detail: "T", run: func(a *App) { a.openThemePicker() }},
-		{kind: "cmd", label: "Ayuda y atajos", detail: "?", run: func(a *App) { a.help = true }},
+		{kind: "cmd", label: "Ayuda y atajos", detail: "?", run: func(a *App) { a.detail = a.helpReader() }},
 	}
 
 	clients, _ := p.st.ListClients()

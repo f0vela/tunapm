@@ -167,6 +167,7 @@ func (a *App) openThemePicker() {
 	preview := func(a *App, item pickItem) {
 		if t, ok := themeByID(item.Value); ok {
 			applyTheme(t)
+			a.restyle()
 			a.reloadAll()
 		}
 	}
@@ -183,6 +184,7 @@ func (a *App) openThemePicker() {
 	a.picker.onCancel = func(a *App) {
 		if t, ok := themeByID(previous); ok {
 			applyTheme(t)
+			a.restyle()
 			a.reloadAll()
 		}
 	}
@@ -207,6 +209,13 @@ func formTheme() *huh.Theme {
 	f.TextInput.Prompt = f.TextInput.Prompt.Foreground(colorAccent)
 	f.TextInput.Placeholder = f.TextInput.Placeholder.Foreground(colorFaint)
 	f.TextInput.Text = f.TextInput.Text.Foreground(colorStrong)
+	f.FocusedButton = lipgloss.NewStyle().Padding(0, 2).MarginRight(1).Bold(true).Foreground(colorOnAcc).Background(colorAccent)
+	f.BlurredButton = lipgloss.NewStyle().Padding(0, 2).MarginRight(1).Foreground(colorText).Background(colorSelBg)
+	f.MultiSelectSelector = f.MultiSelectSelector.Foreground(colorAccent)
+	f.SelectedPrefix = lipgloss.NewStyle().Foreground(colorAccent).SetString("[•] ")
+	f.UnselectedPrefix = lipgloss.NewStyle().Foreground(colorMuted).SetString("[ ] ")
+	f.TextInput.Placeholder = f.TextInput.Placeholder.Foreground(colorMuted)
+	f.Description = f.Description.Foreground(colorMuted)
 
 	t.Blurred = t.Focused
 	t.Blurred.Base = t.Blurred.Base.BorderStyle(lipgloss.HiddenBorder())

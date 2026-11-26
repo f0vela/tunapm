@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -243,10 +244,6 @@ func (n *Notes) info() string {
 	return strings.Join(parts, " · ")
 }
 
-func (n *Notes) hints() string {
-	return "n nueva · e editar · t etiqueta · f proyecto · / buscar · enter leer · d borrar"
-}
-
 // ---------- teclas ----------
 
 func (n *Notes) move(delta int) {
@@ -258,6 +255,7 @@ func (n *Notes) move(delta int) {
 }
 
 func (n *Notes) handleKey(a *App, msg tea.KeyMsg) {
+	n.syncKeys()
 	if n.searching {
 		switch msg.String() {
 		case "esc":
@@ -277,40 +275,40 @@ func (n *Notes) handleKey(a *App, msg tea.KeyMsg) {
 	}
 
 	note := n.selected()
-	switch msg.String() {
-	case "j", "down":
+	switch {
+	case key.Matches(msg, noteKeys.Down):
 		n.move(1)
-	case "k", "up":
+	case key.Matches(msg, noteKeys.Up):
 		n.move(-1)
-	case "/":
+	case key.Matches(msg, noteKeys.Search):
 		n.searching = true
 		n.searchInput.Focus()
-	case "esc":
+	case key.Matches(msg, noteKeys.Clear):
 		n.clearFilters()
 		n.reload()
-	case "n":
+	case key.Matches(msg, noteKeys.New):
 		draft := store.Note{ProjectID: n.projectFilter}
 		if n.tag != "" {
 			draft.Tags = []string{n.tag}
 		}
 		a.openNoteForm(draft)
-	case "e":
+	case key.Matches(msg, noteKeys.Edit):
 		if note != nil {
 			a.openNoteForm(*note)
 		}
-	case "enter":
+	case key.Matches(msg, noteKeys.Read):
 		if note != nil {
 			a.detail = noteDetail(*note)
 		}
-	case "t":
+	case key.Matches(msg, noteKeys.Tag):
 		a.openNoteTagPicker()
-	case "f":
+	case key.Matches(msg, noteKeys.Project):
 		a.openNoteProjectPicker()
-	case "g":
+	case key.Matches(msg, noteKeys.GoProject):
 		if note != nil && note.ProjectID != nil && a.projects.selectByID(*note.ProjectID) {
 			a.setTab(tabProjects)
 		}
-	case "d":
+	case key.Matches(msg, noteKeys.Delete):
 		if note == nil {
 			return
 		}
@@ -326,7 +324,7 @@ func (n *Notes) handleKey(a *App, msg tea.KeyMsg) {
 	}
 }
 
-func noteDetail(note store.Note) *Detail {
+func noteDetail(note store.Note) *Reader {
 	today := dates.Today()
 	project := "Sin proyecto"
 	if note.ProjectName != "" {
@@ -338,7 +336,7 @@ func noteDetail(note store.Note) *Detail {
 	}
 	lines = append(lines, mutedStyle.Render("Editada "+noteDate(note.UpdatedAt, today)), "")
 	lines = append(lines, strings.Split(note.Body, "\n")...)
-	return &Detail{title: note.Title, lines: lines}
+	return newReader(note.Title, lines)
 }
 
 func (a *App) openNoteTagPicker() {
@@ -384,7 +382,23 @@ func (a *App) openNoteProjectPicker() {
 func (a *App) openNoteForm(note store.Note) {
 	projects, _ := a.st.ListProjects()
 	title, body := note.Title, note.Body
-	tagsRaw := strings.Join(note.Tags, " ")
+	// Etiquetas existentes: se eligen de una lista (sin errores de tipeo); las nuevas se escriben.
+	known, _ := a.st.NoteTags()
+	inUse := map[string]bool{}
+	var tagOpts []huh.Option[string]
+	for _, t := range known {
+		inUse[t.Tag] = true
+		tagOpts = append(tagOpts, huh.NewOption(fmt.Sprintf("#%s  (%d)", t.Tag, t.Count), t.Tag))
+	}
+	var picked, extra []string
+	for _, t := range note.Tags {
+		if inUse[t] {
+			picked = append(picked, t)
+		} else {
+			extra = append(extra, t)
+		}
+	}
+	tagsRaw := strings.Join(extra, " ")
 	var projectID int64
 	if note.ProjectID != nil {
 		projectID = *note.ProjectID
@@ -395,18 +409,27 @@ func (a *App) openNoteForm(note store.Note) {
 		opts = append(opts, huh.NewOption(truncate(p.Name+" · "+p.ClientName, 60), p.ID))
 	}
 
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().Title("Título").Value(&title).Validate(huh.ValidateNotEmpty()),
-			huh.NewSelect[int64]().Title("Proyecto").Options(opts...).Value(&projectID).Height(5),
-			huh.NewInput().Title("Etiquetas").Placeholder("idea reunion pendiente-cliente").Value(&tagsRaw),
-			huh.NewText().Title("Texto").Value(&body).Lines(8),
-		),
+	fields := []huh.Field{
+		huh.NewInput().Title("Título").Value(&title).Validate(huh.ValidateNotEmpty()),
+		huh.NewSelect[int64]().Title("Proyecto").Options(opts...).Value(&projectID).Height(5).Description(searchHint(len(opts))),
+	}
+	newTagsTitle := "Etiquetas"
+	if len(tagOpts) > 0 {
+		fields = append(fields, huh.NewMultiSelect[string]().Title("Etiquetas").Options(tagOpts...).Value(&picked).
+			Filterable(true).Height(min(len(tagOpts)+2, 6)).Description("espacio marca · / busca"))
+		newTagsTitle = "Etiquetas nuevas"
+	}
+	fields = append(fields,
+		huh.NewInput().Title(newTagsTitle).Placeholder("idea reunion pendiente-cliente").Value(&tagsRaw).
+			Description("Separadas por espacio o coma"),
+		huh.NewText().Title("Texto").Value(&body).Lines(8),
 	)
+	form := huh.NewForm(huh.NewGroup(fields...))
 
 	a.openForm(form, func() error {
 		out := note
-		out.Title, out.Body, out.Tags = strings.TrimSpace(title), body, store.ParseTags(tagsRaw)
+		out.Title, out.Body = strings.TrimSpace(title), body
+		out.Tags = store.NormalizeTags(append(append([]string{}, picked...), store.ParseTags(tagsRaw)...))
 		out.ProjectID = nil
 		if projectID != 0 {
 			out.ProjectID = &projectID

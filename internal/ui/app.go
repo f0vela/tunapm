@@ -4,27 +4,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
 	"tunapm/internal/store"
 )
-
-type keyMap struct {
-	Quit    key.Binding
-	Palette key.Binding
-	Help    key.Binding
-	Tabs    key.Binding
-}
-
-var keys = keyMap{
-	Quit:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "salir")),
-	Palette: key.NewBinding(key.WithKeys("ctrl+k", ":"), key.WithHelp("ctrl+k", "paleta")),
-	Help:    key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "ayuda")),
-	Tabs:    key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6"), key.WithHelp("1-6", "vistas")),
-}
 
 const (
 	tabTasks = iota
@@ -67,10 +55,11 @@ type App struct {
 
 	palette *Palette
 	picker  *Picker
-	confirm *Confirm
-	detail  *Detail
-	help    bool
-	helpOff int // desplazamiento de la ayuda cuando no cabe
+	detail  *Reader // ventana de lectura (nota, tarea, evento) o la ayuda
+
+	barHelp  help.Model    // atajos de la barra de estado
+	spin     spinner.Model // sincronización en curso (modo remoto)
+	spinning bool
 
 	form     *huh.Form
 	formSave func() error
@@ -82,7 +71,8 @@ type App struct {
 
 func NewApp(st store.Repo) *App {
 	loadTheme()
-	a := &App{st: st, width: 100, height: 32}
+	a := &App{st: st, width: 100, height: 32, barHelp: newBarHelp()}
+	a.spin = spinner.New(spinner.WithSpinner(spinner.MiniDot))
 	a.tasks = newTasks(st)
 	a.projects = newProjects(st)
 	a.clients = newClients(st)
@@ -90,15 +80,40 @@ func NewApp(st store.Repo) *App {
 	a.notes = newNotes(st)
 	a.calendar = newCalendar(st)
 	a.syncer, _ = st.(Syncer)
+	a.restyle()
 	a.layout()
 	return a
 }
 
 func (a *App) Init() tea.Cmd {
 	if a.syncer != nil {
-		return waitSync(a.syncer)
+		return tea.Batch(waitSync(a.syncer), a.startSpinner())
 	}
 	return nil
+}
+
+// syncBusy: conectando o enviando cambios pendientes.
+func (a *App) syncBusy() bool {
+	if a.syncer == nil {
+		return false
+	}
+	state, pending, _ := a.syncer.SyncStatus()
+	return state == "conectando" || (state == "en línea" && pending > 0)
+}
+
+// startSpinner arranca el spinner solo si hay trabajo; se detiene solo al terminar.
+func (a *App) startSpinner() tea.Cmd {
+	if a.spinning || !a.syncBusy() {
+		return nil
+	}
+	a.spinning = true
+	return a.spin.Tick
+}
+
+// restyle aplica el tema actual a los componentes que guardan estilos propios.
+func (a *App) restyle() {
+	a.barHelp = newBarHelp()
+	a.spin.Style = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBarBg)
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -112,9 +127,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, n := range a.syncer.TakeNotices() {
 			a.errf("%s", n)
 		}
-		return a, waitSync(a.syncer)
+		return a, tea.Batch(waitSync(a.syncer), a.startSpinner())
+	case spinner.TickMsg:
+		if !a.syncBusy() {
+			a.spinning = false
+			return a, nil
+		}
+		var cmd tea.Cmd
+		a.spin, cmd = a.spin.Update(msg)
+		return a, cmd
 	case tea.KeyMsg:
-		cmd := a.handleKey(msg)
+		// Una escritura local deja cambios por enviar: el spinner lo muestra hasta que lleguen.
+		cmd := tea.Batch(a.handleKey(msg), a.startSpinner())
 		if a.formInit != nil {
 			init := a.formInit
 			a.formInit = nil
@@ -135,17 +159,6 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if a.form != nil {
 		return a.updateForm(msg)
 	}
-	if a.confirm != nil {
-		switch msg.String() {
-		case "y", "Y", "enter":
-			yes := a.confirm.onYes
-			a.confirm = nil
-			yes(a)
-		case "n", "N", "esc":
-			a.confirm = nil
-		}
-		return nil
-	}
 	if a.picker != nil {
 		return a.picker.handleKey(a, msg)
 	}
@@ -153,73 +166,33 @@ func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return a.palette.handleKey(a, msg)
 	}
 	if a.detail != nil {
-		switch msg.String() {
-		case "esc", "enter", "q":
+		if a.detail.handleKey(msg) {
 			a.detail = nil
-		case "j", "down":
-			a.detail.scroll(1)
-		case "k", "up":
-			a.detail.scroll(-1)
-		case " ", "pgdown", "ctrl+d", "ctrl+f":
-			a.detail.scroll(a.detail.page)
-		case "b", "pgup", "ctrl+u", "ctrl+b":
-			a.detail.scroll(-a.detail.page)
-		case "g", "home":
-			a.detail.scroll(-a.detail.offset)
-		case "G", "end":
-			a.detail.scroll(a.detail.maxOffset)
-		}
-		return nil
-	}
-	if a.help {
-		switch msg.String() {
-		case "esc", "?", "q":
-			a.help, a.helpOff = false, 0
-		case "j", "down":
-			a.helpOff++
-		case "k", "up":
-			a.helpOff--
-		case " ", "pgdown":
-			a.helpOff += max(a.height-12, 1)
-		case "b", "pgup":
-			a.helpOff -= max(a.height-12, 1)
-		case "g", "home":
-			a.helpOff = 0
 		}
 		return nil
 	}
 
 	// Mientras se escribe en la búsqueda, las letras no son atajos globales.
-	if a.tab == tabTasks && a.tasks.searching && !key.Matches(msg, keys.Quit) {
+	if a.tab == tabTasks && a.tasks.searching && !key.Matches(msg, globalKeys.Quit) {
 		a.tasks.handleKey(a, msg)
 		return nil
 	}
-	if a.tab == tabNotes && a.notes.searching && !key.Matches(msg, keys.Quit) {
+	if a.tab == tabNotes && a.notes.searching && !key.Matches(msg, globalKeys.Quit) {
 		a.notes.handleKey(a, msg)
 		return nil
 	}
 
 	switch {
-	case key.Matches(msg, keys.Quit):
+	case key.Matches(msg, globalKeys.Quit):
 		return tea.Quit
-	case key.Matches(msg, keys.Palette):
+	case key.Matches(msg, globalKeys.Palette):
 		a.openPalette("")
-	case key.Matches(msg, keys.Help):
-		a.help = true
-	case msg.String() == "T":
+	case key.Matches(msg, globalKeys.Help):
+		a.detail = a.helpReader()
+	case key.Matches(msg, globalKeys.Theme):
 		a.openThemePicker()
-	case msg.String() == "1":
-		a.setTab(tabTasks)
-	case msg.String() == "2":
-		a.setTab(tabProjects)
-	case msg.String() == "3":
-		a.setTab(tabClients)
-	case msg.String() == "4":
-		a.setTab(tabPayments)
-	case msg.String() == "5":
-		a.setTab(tabNotes)
-	case msg.String() == "6":
-		a.setTab(tabCalendar)
+	case key.Matches(msg, globalKeys.Tabs):
+		a.setTab(int(msg.String()[0] - '1'))
 	default:
 		switch a.tab {
 		case tabTasks:
@@ -293,16 +266,12 @@ func (a *App) View() string {
 	switch {
 	case a.form != nil:
 		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Center, modalStyle.Render(a.form.View()))
-	case a.confirm != nil:
-		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Center, a.confirm.view())
 	case a.picker != nil:
 		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Center, a.picker.view())
 	case a.palette != nil:
 		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Top, a.palette.view())
 	case a.detail != nil:
 		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Center, a.detail.view(bodyW, bodyH))
-	case a.help:
-		body = lipgloss.Place(bodyW, bodyH, lipgloss.Center, lipgloss.Center, a.helpView())
 	default:
 		body = a.activeView()
 	}
@@ -364,6 +333,10 @@ func (a *App) sourceBadge() string {
 			}
 		}
 	}
+	if a.spinning {
+		label = a.spin.View() + lipgloss.NewStyle().Foreground(color).Background(colorBarBg).Bold(true).Render(strings.TrimPrefix(label, "●"))
+		return label + lipgloss.NewStyle().Background(colorBarBg).Render(" ")
+	}
 	return lipgloss.NewStyle().Foreground(color).Background(colorBarBg).Bold(true).Render(label) +
 		lipgloss.NewStyle().Background(colorBarBg).Render(" ")
 }
@@ -391,48 +364,21 @@ func (a *App) statusBar() string {
 	left := a.activeInfo()
 	var right string
 	if a.toast != "" {
-		right = toastColor(a.toastErr).Background(colorBarBg).Render(a.toast)
+		right = toastColor(a.toastErr).Background(colorBarBg).Render(truncate(a.toast, inner))
 	} else {
-		// Se muestran tantos atajos como quepan; ? ayuda siempre al final.
-		hints := strings.Split(a.activeHints(), " · ")
-		for n := len(hints); n >= 0; n-- {
-			right = barHints(append(append([]string{}, hints[:n]...), "? ayuda"))
-			if lipglossWidth(left)+lipglossWidth(right)+2 <= inner {
-				break
-			}
+		// "? ayuda" siempre queda; el resto de los atajos se recorta si no cabe.
+		helpKey := a.barHelp.ShortHelpView([]key.Binding{globalKeys.Help})
+		room := inner - lipglossWidth(helpKey) - min(lipglossWidth(left), inner/3) - 4
+		a.barHelp.Width = max(room, 0)
+		right = a.barHelp.ShortHelpView(a.activeShortHelp())
+		if right != "" {
+			right += bg.Render("  ")
 		}
+		right += helpKey
 	}
 	left = truncate(left, max(inner-lipglossWidth(right)-2, 0))
 	gap := max(inner-lipglossWidth(left)-lipglossWidth(right), 0)
 	return bg.Render(" ") + bg.Foreground(colorText).Render(left) + bg.Render(strings.Repeat(" ", gap)) + right + bg.Render(" ")
-}
-
-// barHints pinta los atajos sobre el fondo de la barra de estado.
-func barHints(hints []string) string {
-	bg := lipgloss.NewStyle().Background(colorBarBg)
-	var parts []string
-	for _, hint := range hints {
-		k, desc, _ := strings.Cut(hint, " ")
-		parts = append(parts, keyStyle.Background(colorBarBg).Render(k)+bg.Foreground(colorMuted).Render(" "+desc))
-	}
-	return strings.Join(parts, bg.Render("  "))
-}
-
-func (a *App) activeHints() string {
-	switch a.tab {
-	case tabProjects:
-		return a.projects.hints()
-	case tabClients:
-		return a.clients.hints()
-	case tabPayments:
-		return a.payments.hints()
-	case tabNotes:
-		return a.notes.hints()
-	case tabCalendar:
-		return a.calendar.hints()
-	default:
-		return a.tasks.hints()
-	}
 }
 
 func (a *App) activeInfo() string {
@@ -465,8 +411,23 @@ func (a *App) errf(format string, args ...any) {
 	a.toast, a.toastErr = fmt.Sprintf(format, args...), true
 }
 
+// confirmAction pregunta antes de algo destructivo. "Cancelar" viene marcado por
+// defecto; y / n responden directo y ←→ cambian de opción.
 func (a *App) confirmAction(question string, yes func(*App)) {
-	a.confirm = &Confirm{question: question, onYes: yes}
+	confirmed := false
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().Title(question).Affirmative("Sí").Negative("Cancelar").Value(&confirmed),
+	))
+	a.openForm(form, func() error {
+		if confirmed {
+			yes(a)
+		}
+		return nil
+	})
+	a.form.WithShowHelp(false)
+	if a.width > 20 {
+		a.form.WithWidth(min(max(lipglossWidth(question)+4, 36), a.width-8))
+	}
 }
 
 // openForm muestra un formulario huh y guarda al completarlo.
@@ -485,14 +446,23 @@ func (a *App) openForm(form *huh.Form, save func() error) {
 	km.Select.Up.SetHelp("↑", "subir")
 	km.Select.Down.SetHelp("↓", "bajar")
 	km.Select.Filter.SetHelp("/", "filtrar")
+	km.Select.Left.SetHelp("←", "anterior")
+	km.Select.Right.SetHelp("→", "siguiente")
 	km.Text.NewLine.SetHelp("alt+enter", "nueva línea")
 	km.Text.Editor.SetHelp("ctrl+e", "abrir editor")
+	km.MultiSelect.Toggle.SetHelp("espacio", "marcar")
+	km.MultiSelect.Filter.SetHelp("/", "filtrar")
+	km.MultiSelect.Next.SetHelp("enter", "siguiente")
+	km.MultiSelect.Submit.SetHelp("enter", "guardar")
+	km.Confirm.Toggle.SetHelp("←/→", "cambiar")
+	km.Confirm.Submit.SetHelp("enter", "aceptar")
 	form.WithKeyMap(km).WithShowHelp(true).WithTheme(formTheme())
 	if a.width > 20 {
 		form.WithWidth(min(a.width-8, 72))
 	}
-	if a.height > 12 {
-		form.WithHeight(a.height - 8)
+	// Solo se limita la altura si el formulario no cabe; los cortos quedan compactos.
+	if limit := a.height - 8; a.height > 12 && lipgloss.Height(form.View()) > limit {
+		form.WithHeight(limit)
 	}
 	a.form, a.formSave = form, save
 	a.formInit = form.Init()
@@ -516,70 +486,6 @@ func (a *App) updateForm(msg tea.Msg) tea.Cmd {
 		a.form, a.formSave = nil, nil
 	}
 	return cmd
-}
-
-// ---- overlays simples ----
-
-type Confirm struct {
-	question string
-	onYes    func(*App)
-}
-
-func (c *Confirm) view() string {
-	return modalStyle.Render(
-		titleStyle.Render(c.question) + "\n\n" +
-			renderHints("y confirmar · n cancelar"))
-}
-
-// Detail es una ventana de lectura. Si el contenido no cabe, se desplaza.
-type Detail struct {
-	title string
-	lines []string
-
-	offset    int // primera línea visible
-	page      int // líneas visibles (lo fija view)
-	maxOffset int // último offset válido (lo fija view)
-}
-
-func (d *Detail) scroll(delta int) {
-	d.offset = max(min(d.offset+delta, d.maxOffset), 0)
-}
-
-func (d *Detail) view(width, height int) string {
-	maxWidth := max(min(width-8, 90), 24)
-	inner := maxWidth - 6 // borde y relleno horizontal
-
-	var content []string
-	for _, line := range d.lines {
-		for _, wrapped := range strings.Split(wrapLine(line, inner), "\n") {
-			content = append(content, truncate(wrapped, inner))
-		}
-	}
-
-	// Fuera del texto: borde y relleno (4), título y separación (2), pie (2).
-	d.page = max(height-8, 3)
-	d.maxOffset = max(len(content)-d.page, 0)
-	d.offset = max(min(d.offset, d.maxOffset), 0)
-
-	end := min(d.offset+d.page, len(content))
-	visible := content[d.offset:end]
-
-	footer := renderHints("esc cerrar")
-	if d.maxOffset > 0 {
-		for len(visible) < d.page {
-			visible = append(visible, "")
-		}
-		position := fmt.Sprintf("líneas %d-%d de %d", d.offset+1, end, len(content))
-		switch {
-		case d.offset == 0:
-			position += "  ↓ hay más"
-		case d.offset == d.maxOffset:
-			position += "  fin"
-		}
-		footer = spread(renderHints("j/k mover · espacio página · g/G inicio/fin · esc cerrar"), mutedStyle.Render(position), inner)
-	}
-	body := titleStyle.Render(truncate(d.title, inner)) + "\n\n" + strings.Join(visible, "\n") + "\n\n" + footer
-	return modalStyle.Width(maxWidth).Render(body)
 }
 
 func wrapLine(line string, width int) string {

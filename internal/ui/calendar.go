@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -220,7 +221,7 @@ func (c *Calendar) gridView(width, height int) string {
 	lines = append(lines, "",
 		pad+" "+renderHints("←→ día · ↑↓ semana"),
 		pad+" "+renderHints("[ ] mes · t hoy"),
-		pad+" "+renderHints("tab siguiente entrada"),
+		pad+" "+renderHints("tab otra entrada"),
 	)
 	for i := range lines {
 		lines[i] = truncate(lines[i], width)
@@ -294,59 +295,43 @@ func (c *Calendar) info() string {
 	return "Calendario · " + agenda.DayTitle(c.date)
 }
 
-func (c *Calendar) hints() string {
-	hints := "n evento · v vista · t hoy"
-	if it := c.selected(); it != nil {
-		switch it.Type {
-		case agenda.TypeEvent:
-			hints = "n evento · e editar · d borrar · v vista · t hoy"
-		case agenda.TypeTask:
-			hints = "enter ver tarea · espacio hecha · n evento · v vista · t hoy"
-		case agenda.TypePayment:
-			hints = "enter ver cobro · x pagada · n evento · v vista · t hoy"
-		default:
-			hints = "enter ver proyecto · n evento · v vista · t hoy"
-		}
-	}
-	return hints + " · ctrl+k paleta"
-}
-
 // ---------- teclas ----------
 
 func (c *Calendar) handleKey(a *App, msg tea.KeyMsg) {
+	c.syncKeys()
 	it := c.selected()
-	switch msg.String() {
-	case "h", "left":
+	switch {
+	case key.Matches(msg, calendarKeys.PrevDay):
 		c.goTo(agenda.Add(c.date, -1))
-	case "l", "right":
+	case key.Matches(msg, calendarKeys.NextDay):
 		c.goTo(agenda.Add(c.date, 1))
-	case "k", "up":
+	case key.Matches(msg, calendarKeys.PrevWeek):
 		c.goTo(agenda.Add(c.date, -7))
-	case "j", "down":
+	case key.Matches(msg, calendarKeys.NextWeek):
 		c.goTo(agenda.Add(c.date, 7))
-	case "[", "pgup":
+	case key.Matches(msg, calendarKeys.PrevMonth):
 		c.goTo(agenda.AddMonths(c.date, -1))
-	case "]", "pgdown":
+	case key.Matches(msg, calendarKeys.NextMonth):
 		c.goTo(agenda.AddMonths(c.date, 1))
-	case "t":
+	case key.Matches(msg, calendarKeys.Today):
 		c.goTo(dates.Today())
-	case "v":
+	case key.Matches(msg, calendarKeys.View):
 		c.mode = map[string]string{calMonth: calWeek, calWeek: calDay, calDay: calMonth}[c.mode]
-	case "tab":
+	case key.Matches(msg, calendarKeys.NextItem):
 		if n := len(c.byDate[c.date]); n > 0 {
 			c.item = (c.item + 1) % n
 		}
-	case "shift+tab":
+	case key.Matches(msg, calendarKeys.PrevItem):
 		if n := len(c.byDate[c.date]); n > 0 {
 			c.item = (c.item + n - 1) % n
 		}
-	case "n":
+	case key.Matches(msg, calendarKeys.New):
 		a.openEventForm(store.Event{Date: c.date, Kind: store.EventReunion})
-	case "e", "enter":
+	case key.Matches(msg, calendarKeys.Edit, calendarKeys.Open):
 		if it != nil {
-			c.open(a, *it, msg.String() == "e")
+			c.open(a, *it, key.Matches(msg, calendarKeys.Edit))
 		}
-	case "d":
+	case key.Matches(msg, calendarKeys.Delete):
 		if it == nil || it.Type != agenda.TypeEvent {
 			if it != nil {
 				a.errf("Solo los eventos se borran aquí; una %s se gestiona en su vista (enter)", it.Label())
@@ -362,7 +347,7 @@ func (c *Calendar) handleKey(a *App, msg tea.KeyMsg) {
 			a.toastf("Evento borrado")
 			a.reloadAll()
 		})
-	case " ":
+	case key.Matches(msg, calendarKeys.Toggle):
 		if it != nil && it.Type == agenda.TypeTask {
 			task, err := a.st.GetTask(it.ID)
 			if err != nil {
@@ -381,7 +366,7 @@ func (c *Calendar) handleKey(a *App, msg tea.KeyMsg) {
 			a.toastf("Tarea actualizada")
 			a.reloadAll()
 		}
-	case "x":
+	case key.Matches(msg, calendarKeys.Pay):
 		if it != nil && it.Type == agenda.TypePayment {
 			if pay, err := a.st.GetPayment(it.ID); err == nil {
 				a.openPaidDateForm(pay)
@@ -419,7 +404,7 @@ func (c *Calendar) open(a *App, it agenda.Item, edit bool) {
 	}
 }
 
-func eventDetail(ev store.Event) *Detail {
+func eventDetail(ev store.Event) *Reader {
 	when := agenda.DayTitle(ev.Date) + " " + ev.Date[:4]
 	if ev.Time != nil {
 		when += ", " + *ev.Time
@@ -436,7 +421,7 @@ func eventDetail(ev store.Event) *Detail {
 		lines = append(lines, "")
 		lines = append(lines, strings.Split(ev.Notes, "\n")...)
 	}
-	return &Detail{title: ev.Title, lines: lines}
+	return newReader(ev.Title, lines)
 }
 
 // openEventForm crea o edita un evento. Hora, proyecto y cliente son opcionales.
@@ -478,8 +463,9 @@ func (a *App) openEventForm(ev store.Event) {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().Title("Título").Value(&title).Validate(huh.ValidateNotEmpty()),
-			huh.NewSelect[string]().Title("Tipo").Options(kindOpts...).Value(&kind).Height(5),
+			huh.NewSelect[string]().Title("Tipo").Options(kindOpts...).Value(&kind).Inline(true),
 			huh.NewInput().Title("Fecha").Placeholder("hoy, viernes, 15/12, +3d").Value(&dateRaw).
+				DescriptionFunc(datePreviewFunc(&dateRaw, "falta la fecha"), &dateRaw).
 				Validate(func(s string) error {
 					if strings.TrimSpace(s) == "" {
 						return fmt.Errorf("la fecha es obligatoria")
@@ -489,8 +475,10 @@ func (a *App) openEventForm(ev store.Event) {
 			huh.NewInput().Title("Hora (opcional)").Placeholder("15:30; vacío = todo el día").Value(&timeRaw).Validate(validTime),
 		).Title("Evento"),
 		huh.NewGroup(
-			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Value(&projectID).Height(6),
-			huh.NewSelect[int64]().Title("Cliente").Options(clientOpts...).Value(&clientID).Height(6),
+			huh.NewSelect[int64]().Title("Proyecto").Options(projectOpts...).Value(&projectID).Height(6).
+				Description(searchHint(len(projectOpts))),
+			huh.NewSelect[int64]().Title("Cliente").Options(clientOpts...).Value(&clientID).Height(6).
+				Description(searchHint(len(clientOpts))),
 			huh.NewText().Title("Notas").Value(&notes).Lines(3),
 		).Title("Relacionado con"),
 	)

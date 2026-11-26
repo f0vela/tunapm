@@ -1,105 +1,55 @@
 package ui
 
-import "strings"
+import (
+	"strings"
 
-type helpSection struct {
-	title string
-	keys  [][2]string
-}
+	"github.com/charmbracelet/bubbles/key"
+)
 
-var helpLeft = []helpSection{
-	{"Global", [][2]string{
-		{"1-6", "cambiar de vista"},
-		{"ctrl+k  :", "paleta de comandos"},
-		{"j/k  ↑/↓", "mover la selección"},
-		{"esc", "limpiar filtros, cerrar ventanas"},
-		{"?  T", "esta ayuda, tema de colores"},
-		{"ctrl+c", "salir"},
-	}},
-	{"Tareas", [][2]string{
-		{"o  a  h", "abiertas, todas, hechas"},
-		{"n  espacio", "nueva, marcar hecha"},
-		{"s  +  -", "estado, subir o bajar prioridad"},
-		{"e  d", "editar, borrar"},
-		{"enter  g", "ver detalle, ir al proyecto"},
-		{"/  f", "buscar, filtrar"},
-	}},
-	{"Notas", [][2]string{
-		{"n  e  d", "nueva, editar, borrar"},
-		{"t  f", "filtrar por etiqueta o proyecto"},
-		{"/  enter", "buscar, leer completa"},
-	}},
-}
+// La ayuda (?) se arma con los mismos key.Binding que usan las vistas, así no
+// puede quedar desactualizada respecto de las teclas reales.
 
-var helpRight = []helpSection{
-	{"Proyectos", [][2]string{
-		{"n  e  d", "nuevo, editar, borrar"},
-		{"S", "cambiar estado"},
-		{"c  x", "agregar cuota, pagar la siguiente"},
-		{"enter  o", "ver sus tareas, ver sus notas"},
-	}},
-	{"Clientes", [][2]string{
-		{"n  e  d", "nuevo, editar, borrar"},
-		{"enter", "ver sus tareas"},
-	}},
-	{"Cobros", [][2]string{
-		{"x", "marcar la cuota como pagada"},
-	}},
-	{"Calendario", [][2]string{
-		{"←→  ↑↓", "día, semana"},
-		{"[ ]  t", "mes anterior o siguiente, hoy"},
-		{"v  tab", "vista mes/semana/día, otra entrada"},
-		{"n  e  d", "nuevo evento, editar, borrar"},
-		{"enter", "abrir la tarea, cobro o proyecto"},
-	}},
-	{"Creación rápida en la paleta", [][2]string{
-		{"t", "Diseñar logo @proyecto !alta ^viernes"},
-		{"c", "Juan Pérez #Empresa"},
-		{"p", "Sitio web @cliente $5000 usd ^20/12"},
-		{"$", "2500 @proyecto ^15/12"},
-		{"n", "Idea para el home @proyecto #idea"},
-		{"e", "Reunión @proyecto ^viernes 15:30"},
-	}},
-}
+var helpLeft = []helpGroup{globalHelp, taskHelp, noteHelp, clientHelp, paymentHelp}
 
-func helpColumn(sections []helpSection, width int) string {
+var quickAddHelp = helpGroup{"Creación rápida en la paleta", []key.Binding{
+	bind(nil, "t", "Diseñar logo @proyecto !alta ^viernes"),
+	bind(nil, "c", "Juan Pérez #Empresa"),
+	bind(nil, "p", "Sitio web @cliente $5000 usd ^20/12"),
+	bind(nil, "$", "2500 @proyecto ^15/12"),
+	bind(nil, "n", "Idea para el home @proyecto #idea"),
+	bind(nil, "e", "Reunión @proyecto ^viernes 15:30"),
+}}
+
+var helpRight = []helpGroup{projectHelp, calendarHelp, quickAddHelp}
+
+func helpColumn(groups []helpGroup, width int) string {
 	var lines []string
-	for i, section := range sections {
+	for i, g := range groups {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, sectionStyle.Render(section.title))
-		for _, k := range section.keys {
-			lines = append(lines, truncate(keyStyle.Render(padRight(k[0], 10))+" "+mutedStyle.Render(k[1]), width))
+		lines = append(lines, sectionStyle.Render(g.title))
+		for _, b := range g.bindings {
+			h := b.Help()
+			lines = append(lines, truncate(keyStyle.Render(padRight(h.Key, 10))+" "+mutedStyle.Render(h.Desc), width))
 		}
 	}
 	return strings.Join(lines, "\n")
 }
 
-func (a *App) helpView() string {
-	width := max(min(a.width-8, 104), 30)
-	inner := width - 6
-	var body string
-	if inner >= 76 {
-		leftW := 44
-		body = joinColumns(helpColumn(helpLeft, leftW), "   ", helpColumn(helpRight, inner-leftW-3))
-	} else {
-		body = helpColumn(append(append([]helpSection{}, helpLeft...), helpRight...), inner)
-	}
-	lines := strings.Split(body, "\n")
-	footer := renderHints("esc cerrar")
-	// Si no cabe, se desplaza con j/k en vez de cortarse.
-	if page := max(a.height-10, 3); len(lines) > page {
-		a.helpOff = max(min(a.helpOff, len(lines)-page), 0)
-		more := "↓ hay más"
-		if a.helpOff == len(lines)-page {
-			more = "fin"
+// helpReader abre la ayuda en una ventana desplazable; en terminales anchas va en dos columnas.
+func (a *App) helpReader() *Reader {
+	r := newReader("Atajos de teclado", nil)
+	r.render = func(width int) string {
+		if width >= 76 {
+			left := helpColumn(helpLeft, width/2)
+			leftW := 0
+			for _, line := range strings.Split(left, "\n") {
+				leftW = max(leftW, lipglossWidth(line))
+			}
+			return joinColumns(left, "    ", helpColumn(helpRight, width-leftW-4))
 		}
-		lines = lines[a.helpOff : a.helpOff+page]
-		footer = spread(renderHints("j/k desplaza · esc cerrar"), mutedStyle.Render(more), inner)
-	} else {
-		a.helpOff = 0
+		return helpColumn(append(append([]helpGroup{}, helpLeft...), helpRight...), width)
 	}
-	content := titleStyle.Render("Atajos de teclado") + "\n\n" + strings.Join(lines, "\n") + "\n\n" + footer
-	return modalStyle.Width(width).Render(content)
+	return r
 }

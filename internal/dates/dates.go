@@ -116,3 +116,15 @@ func Human(date, today string) string {
 	}
 	return date
 }
+
+// Short es como Human pero nunca pasa de 8 caracteres: en otro año usa "02/01/06".
+// Sirve para columnas angostas.
+func Short(date, today string) string {
+	h := Human(date, today)
+	if h == date {
+		if t, err := time.Parse(Layout, date); err == nil {
+			return t.Format("02/01/06")
+		}
+	}
+	return h
+}
