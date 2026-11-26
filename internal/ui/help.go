@@ -39,7 +39,11 @@ func helpColumn(groups []helpGroup, width int) string {
 
 // helpReader abre la ayuda en una ventana desplazable; en terminales anchas va en dos columnas.
 func (a *App) helpReader() *Reader {
-	r := newReader("Atajos de teclado", nil)
+	title := "Atajos de teclado"
+	if Version != "" {
+		title += "  " + mutedStyle.Render("· tuna "+Version)
+	}
+	r := newReader(title, nil)
 	r.render = func(width int) string {
 		if width >= 76 {
 			left := helpColumn(helpLeft, width/2)

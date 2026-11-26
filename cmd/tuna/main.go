@@ -11,14 +11,21 @@ import (
 
 	"tunapm/internal/store"
 	"tunapm/internal/ui"
+	"tunapm/internal/version"
 )
 
 func main() {
 	dbPath := flag.String("db", defaultDBPath(), "ruta de la base de datos SQLite (modo local y serve)")
 	apiURL := flag.String("api", os.Getenv("TUNA_API"), "URL del API (ej. https://tuna.example.com); la TUI y 'web' la usan en vez de SQLite")
 	token := flag.String("token", os.Getenv("TUNA_TOKEN"), "token Bearer del API")
+	showVersion := flag.Bool("version", false, "muestra la versión y sale")
 	flag.Usage = usage
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Print(version.Get())
+		return
+	}
 
 	args := flag.Args()
 	if len(args) > 0 {
@@ -28,6 +35,9 @@ func main() {
 			return
 		case "web":
 			runWeb(*apiURL, *token, args[1:])
+			return
+		case "version":
+			fmt.Print(version.Get())
 			return
 		case "status":
 			runStatus(*dbPath, *apiURL, *token)
@@ -50,6 +60,7 @@ func main() {
 			repo.WaitFirstSync(3 * time.Second)
 		}
 		ui.ConfigDir = filepath.Dir(*dbPath)
+		ui.Version = version.Get().Short()
 		ui.Source, ui.Remote = hostOf(*apiURL), true
 		err = runTUI(repo)
 		repo.Close() // intenta enviar lo pendiente antes de salir
@@ -99,6 +110,7 @@ func main() {
 	}
 
 	ui.ConfigDir = filepath.Dir(*dbPath)
+	ui.Version = version.Get().Short()
 	ui.Source, ui.Remote = "local", false
 	if err := runTUI(st); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -122,6 +134,7 @@ Comandos:
   web   [-addr :8081]          web app que consume el API remoto (-api, -token)
   status                       muestra si usas el API o la base local (y cambios sin enviar)
   sync                         envía los cambios pendientes y trae los del servidor
+  version                      muestra la versión (también: tuna -version)
   seed                         datos de ejemplo
   import <database.sqlite>     importar base antigua
 

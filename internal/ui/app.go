@@ -314,6 +314,9 @@ func (a *App) tabsView() string {
 	return left + lipgloss.NewStyle().Background(colorBarBg).Render(strings.Repeat(" ", gap)) + right
 }
 
+// Version es la versión de la app; la fija main y se muestra en la ayuda (?).
+var Version string
+
 // Source describe de dónde salen los datos: lo fija main. Remote=true es el API.
 var (
 	Source string

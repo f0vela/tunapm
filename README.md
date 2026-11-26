@@ -14,6 +14,16 @@ go build -o tuna ./cmd/tuna
 ./tuna
 ```
 
+`tuna version` (o `tuna -version`) muestra la versión, el commit con el que se
+compiló y la versión de Go. Sin etiqueta dice `dev` más el commit; para fijar
+una versión al compilar:
+
+```sh
+go build -ldflags "-X tunapm/internal/version.Version=$(git describe --tags --always --dirty)" -o tuna ./cmd/tuna
+```
+
+La versión también aparece en la ayuda de la TUI (`?`) y en `GET /api/health`.
+
 La base de datos se crea en `~/.local/share/tunapm/tuna.db`
 (respetando `$XDG_DATA_HOME`). Puedes usar otra ruta:
 

@@ -16,6 +16,7 @@ import (
 	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
 	"tunapm/internal/store"
+	"tunapm/internal/version"
 )
 
 // Códigos de error estables que el cliente traduce a errores del store.
@@ -51,7 +52,9 @@ func New(repo store.Repo, token string) http.Handler {
 
 func (s *Server) routes() {
 	m := s.mux
-	m.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
+	m.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]string{"status": "ok", "version": version.Get().Short()})
+	})
 
 	m.HandleFunc("GET /api/snapshot", s.snapshot)
 
