@@ -350,7 +350,7 @@ func (a *App) openNoteTagPicker() {
 		a.notes.tag = item.Value
 		a.notes.reload()
 	})
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }
 
 func (a *App) openNoteProjectPicker() {
@@ -373,7 +373,7 @@ func (a *App) openNoteProjectPicker() {
 		}
 		n.reload()
 	})
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }
 
 // openNoteForm crea o edita una nota. El proyecto es opcional.

@@ -229,10 +229,7 @@ func (a *App) setTab(tab int) {
 }
 
 func (a *App) layout() {
-	bodyH := a.height - 2
-	if bodyH < 3 {
-		bodyH = 3
-	}
+	bodyH := max(a.bodyHeight(), 3)
 	a.tasks.layout(a.width, bodyH)
 	a.projects.layout(a.width, bodyH)
 	a.clients.layout(a.width, bodyH)
@@ -274,10 +271,7 @@ func (a *App) render() string {
 			mutedStyle.Render(fmt.Sprintf("mínimo %d×%d", minWidth, minHeight))
 		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, msg)
 	}
-	bodyW, bodyH := a.width, a.height-2
-	if bodyH < 1 {
-		bodyH = 1
-	}
+	bodyW, bodyH := a.width, max(a.bodyHeight(), 1)
 
 	var body string
 	switch {
@@ -298,22 +292,6 @@ func (a *App) render() string {
 
 const minWidth, minHeight = 50, 10
 
-func (a *App) tabsView() string {
-	labels := []string{"1 Tareas", "2 Proyectos", "3 Clientes", "4 Cobros", "5 Notas", "6 Calendario"}
-	var b strings.Builder
-	for i, label := range labels {
-		style := tabInactiveStyle
-		if i == a.tab {
-			style = tabActiveStyle
-		}
-		b.WriteString(style.Render(label))
-	}
-	left := b.String()
-	right := a.sourceBadge() + appNameStyle.Render("tunapm")
-	gap := max(a.width-lipglossWidth(left)-lipglossWidth(right), 0)
-	return left + lipgloss.NewStyle().Background(colorBarBg).Render(strings.Repeat(" ", gap)) + right
-}
-
 // Version es la versión de la app; la fija main y se muestra en la ayuda (?).
 var Version string
 
@@ -324,7 +302,7 @@ var (
 )
 
 // sourceBadge muestra en la barra superior de dónde salen los datos y el estado de la sincronización.
-func (a *App) sourceBadge() string {
+func (a *App) sourceBadge(onBar bool) string {
 	if Source == "" {
 		return ""
 	}
@@ -353,12 +331,19 @@ func (a *App) sourceBadge() string {
 			}
 		}
 	}
-	if a.spinning {
-		label = a.spin.View() + lipgloss.NewStyle().Foreground(color).Background(colorBarBg).Bold(true).Render(strings.TrimPrefix(label, "●"))
-		return label + lipgloss.NewStyle().Background(colorBarBg).Render(" ")
+	// Sobre la barra plana lleva su fondo; con pestañas con borde va sobre el fondo de la terminal.
+	text := lipgloss.NewStyle().Foreground(color).Bold(true)
+	space := lipgloss.NewStyle()
+	spin := a.spin
+	spin.Style = lipgloss.NewStyle().Foreground(colorAccent)
+	if onBar {
+		text, space = text.Background(colorBarBg), space.Background(colorBarBg)
+		spin.Style = spin.Style.Background(colorBarBg)
 	}
-	return lipgloss.NewStyle().Foreground(color).Background(colorBarBg).Bold(true).Render(label) +
-		lipgloss.NewStyle().Background(colorBarBg).Render(" ")
+	if a.spinning {
+		return spin.View() + text.Render(strings.TrimPrefix(label, "●")) + space.Render(" ")
+	}
+	return text.Render(label) + space.Render(" ")
 }
 
 func (a *App) activeView() string {
@@ -420,7 +405,7 @@ func (a *App) activeInfo() string {
 
 func (a *App) openPalette(prefill string) {
 	a.palette = newPalette(a.st, prefill)
-	a.palette.layout(a.width, a.height-2)
+	a.palette.layout(a.width, a.bodyHeight())
 }
 
 func (a *App) toastf(format string, args ...any) {
@@ -481,7 +466,8 @@ func (a *App) openForm(form *huh.Form, save func() error) {
 		form.WithWidth(min(a.width-8, 72))
 	}
 	// Solo se limita la altura si el formulario no cabe; los cortos quedan compactos.
-	if limit := a.height - 8; a.height > 12 && lipgloss.Height(form.View()) > limit {
+	// El marco del formulario (borde y relleno) se lleva 6 líneas del contenido.
+	if limit := a.bodyHeight() - 6; a.height > 12 && lipgloss.Height(form.View()) > limit {
 		form.WithHeight(limit)
 	}
 	a.form, a.formSave = form, save

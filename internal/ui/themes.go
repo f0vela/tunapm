@@ -190,7 +190,7 @@ func (a *App) openThemePicker() {
 			a.reloadAll()
 		}
 	}
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }
 
 // inputStyles pinta los campos de texto de bubbles (paleta, buscadores) con el

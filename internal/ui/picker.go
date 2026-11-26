@@ -153,7 +153,7 @@ func (a *App) openFilterPicker() {
 		a.tasks.reload()
 		a.setTab(tabTasks)
 	})
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }
 
 // openProjectStatusPicker cambia el estado del proyecto dado.
@@ -176,7 +176,7 @@ func (a *App) openProjectStatusPicker(projectID int64) {
 		a.projects.reload()
 		a.toastf("Estado: %s", projectStatusLabels[project.Status])
 	})
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }
 
 // openProjectPicker deja elegir un proyecto para una acción posterior.
@@ -193,5 +193,5 @@ func (a *App) openProjectPicker(title string, onSelect func(*App, store.Project)
 		}
 		onSelect(a, project)
 	})
-	a.picker.layout(a.width, a.height-2)
+	a.picker.layout(a.width, a.bodyHeight())
 }

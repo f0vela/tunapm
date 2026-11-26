@@ -41,6 +41,8 @@ Para probar sin capturar datos:
 ## Vistas
 
 Arriba están las pestañas `1 Tareas · 2 Proyectos · 3 Clientes · 4 Cobros · 5 Notas · 6 Calendario`.
+En terminales de 100×28 o más se dibujan como pestañas con borde (3 líneas); en
+más chicas, como barra plana de una línea.
 La vista principal es Tareas. Abajo, la barra de estado muestra el filtro y
 los atajos de la vista actual.
 
