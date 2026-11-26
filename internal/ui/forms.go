@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 
 	"tunapm/internal/agenda"
 	"tunapm/internal/dates"

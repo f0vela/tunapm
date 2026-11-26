@@ -1,14 +1,14 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/dates"
 	"tunapm/internal/store"
@@ -33,15 +33,13 @@ type Notes struct {
 }
 
 func newNotes(st store.Repo) *Notes {
-	ti := textinput.New()
-	ti.Placeholder = "buscar en título, texto, etiquetas o proyecto…"
-	ti.Prompt = "/ "
+	ti := newInput("/ ", "buscar en título, texto, etiquetas o proyecto…")
 	return &Notes{st: st, width: 100, height: 20, searchInput: ti}
 }
 
 func (n *Notes) layout(width, height int) {
 	n.width, n.height = width, height
-	n.searchInput.Width = max(width-30, 10)
+	n.searchInput.SetWidth(max(width-30, 10))
 	n.reload()
 }
 
@@ -254,7 +252,7 @@ func (n *Notes) move(delta int) {
 	n.selectedID = n.notes[idx].ID
 }
 
-func (n *Notes) handleKey(a *App, msg tea.KeyMsg) {
+func (n *Notes) handleKey(a *App, msg tea.KeyPressMsg) {
 	n.syncKeys()
 	if n.searching {
 		switch msg.String() {

@@ -1,12 +1,12 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"tunapm/internal/dates"
 	"tunapm/internal/store"
@@ -28,15 +28,13 @@ type Tasks struct {
 }
 
 func newTasks(st store.Repo) *Tasks {
-	ti := textinput.New()
-	ti.Placeholder = "buscar por título, notas, proyecto o cliente…"
-	ti.Prompt = "/ "
+	ti := newInput("/ ", "buscar por título, notas, proyecto o cliente…")
 	return &Tasks{st: st, width: 100, height: 20, mode: store.FilterOpen, searchInput: ti}
 }
 
 func (t *Tasks) layout(width, height int) {
 	t.width, t.height = width, height
-	t.searchInput.Width = max(width-30, 10)
+	t.searchInput.SetWidth(max(width-30, 10))
 	t.reload()
 }
 
@@ -260,7 +258,7 @@ func (t *Tasks) move(delta int) {
 	t.selectedID = t.tasks[t.cursor].ID
 }
 
-func (t *Tasks) handleKey(a *App, msg tea.KeyMsg) {
+func (t *Tasks) handleKey(a *App, msg tea.KeyPressMsg) {
 	t.syncKeys()
 	if t.searching {
 		switch msg.String() {

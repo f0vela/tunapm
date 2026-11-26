@@ -1,13 +1,14 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
+	"image/color"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
@@ -124,7 +125,7 @@ func (c *Calendar) view() string {
 	return header + "\n" + masterDetail(c.width, max(c.height-1, 1), 30, c.gridView, c.agendaView)
 }
 
-func itemColor(it agenda.Item) lipgloss.TerminalColor {
+func itemColor(it agenda.Item) color.Color {
 	switch {
 	case it.Overdue:
 		return colorRed
@@ -297,7 +298,7 @@ func (c *Calendar) info() string {
 
 // ---------- teclas ----------
 
-func (c *Calendar) handleKey(a *App, msg tea.KeyMsg) {
+func (c *Calendar) handleKey(a *App, msg tea.KeyPressMsg) {
 	c.syncKeys()
 	it := c.selected()
 	switch {

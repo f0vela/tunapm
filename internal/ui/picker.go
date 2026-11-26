@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/store"
 )
@@ -30,8 +30,7 @@ type Picker struct {
 }
 
 func newPicker(title string, items []pickItem, onSelect func(*App, pickItem)) *Picker {
-	ti := textinput.New()
-	ti.Placeholder = "buscar…"
+	ti := newInput("> ", "buscar…")
 	ti.Focus()
 	p := &Picker{title: title, items: items, input: ti, onSelect: onSelect, width: 60, height: 20}
 	p.filter()
@@ -40,7 +39,7 @@ func newPicker(title string, items []pickItem, onSelect func(*App, pickItem)) *P
 
 func (p *Picker) layout(width, height int) {
 	p.width, p.height = width, height
-	p.input.Width = max(min(width-12, 66), 10)
+	p.input.SetWidth(max(min(width-12, 66), 10))
 }
 
 func (p *Picker) listHeight() int {
@@ -62,7 +61,7 @@ func (p *Picker) filter() {
 	}
 }
 
-func (p *Picker) handleKey(a *App, msg tea.KeyMsg) tea.Cmd {
+func (p *Picker) handleKey(a *App, msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		a.picker = nil

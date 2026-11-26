@@ -1,14 +1,15 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
+	"image/color"
 	"sort"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/dates"
 	"tunapm/internal/money"
@@ -17,7 +18,7 @@ import (
 
 type payRow struct {
 	header  string
-	color   lipgloss.TerminalColor
+	color   color.Color
 	totals  map[string]int64
 	count   int
 	payment *store.Payment
@@ -98,7 +99,7 @@ func (p *Payments) reload() {
 	}
 }
 
-func (p *Payments) addGroup(title string, color lipgloss.TerminalColor, payments []store.Payment) {
+func (p *Payments) addGroup(title string, color color.Color, payments []store.Payment) {
 	if len(payments) == 0 {
 		return
 	}
@@ -270,7 +271,7 @@ func (p *Payments) info() string {
 	return fmt.Sprintf("Cobros · %d por cobrar · %d %s", pending, overdue, word)
 }
 
-func (p *Payments) handleKey(a *App, msg tea.KeyMsg) {
+func (p *Payments) handleKey(a *App, msg tea.KeyPressMsg) {
 	p.shortHelp() // actualiza qué atajos aplican
 	switch {
 	case key.Matches(msg, paymentKeys.Down):

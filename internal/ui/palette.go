@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/agenda"
 	"tunapm/internal/dates"
@@ -41,9 +41,7 @@ type Palette struct {
 }
 
 func newPalette(st store.Repo, prefill string) *Palette {
-	ti := textinput.New()
-	ti.Placeholder = "comando, entidad o t tarea · c cliente · p proyecto · $ cuota · n nota · e evento"
-	ti.Prompt = "› "
+	ti := newInput("› ", "comando, entidad o t tarea · c cliente · p proyecto · $ cuota · n nota · e evento")
 	ti.SetValue(prefill)
 	ti.CursorEnd()
 	ti.Focus()
@@ -148,7 +146,7 @@ func (p *Palette) buildItems() []paletteItem {
 
 func (p *Palette) layout(width, height int) {
 	p.width, p.height = width, height
-	p.input.Width = max(min(width-14, 70), 20)
+	p.input.SetWidth(max(min(width-14, 70), 20))
 }
 
 func (p *Palette) listHeight() int {
@@ -179,7 +177,7 @@ func (p *Palette) refresh(a *App) {
 	p.preview = previewLines(a, draft, err)
 }
 
-func (p *Palette) handleKey(a *App, msg tea.KeyMsg) tea.Cmd {
+func (p *Palette) handleKey(a *App, msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		a.palette = nil

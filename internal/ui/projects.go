@@ -1,12 +1,12 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/dates"
 	"tunapm/internal/money"
@@ -312,7 +312,7 @@ func (p *Projects) info() string {
 	return info
 }
 
-func (p *Projects) handleKey(a *App, msg tea.KeyMsg) {
+func (p *Projects) handleKey(a *App, msg tea.KeyPressMsg) {
 	p.syncKeys()
 	proj := p.selectedProject()
 	switch {

@@ -1,12 +1,12 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/key"
 	"errors"
 	"fmt"
-	"github.com/charmbracelet/bubbles/key"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"tunapm/internal/money"
 	"tunapm/internal/store"
@@ -203,7 +203,7 @@ func (c *Clients) info() string {
 	return info
 }
 
-func (c *Clients) handleKey(a *App, msg tea.KeyMsg) {
+func (c *Clients) handleKey(a *App, msg tea.KeyPressMsg) {
 	c.shortHelp() // actualiza qué atajos aplican
 	client := c.selectedClient()
 	switch {

@@ -1,24 +1,26 @@
 package ui
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // theme define la paleta de la interfaz. No cambia el fondo de la terminal:
 // solo los colores de texto, la barra y la selección.
 type theme struct {
 	ID, Name, Kind                     string
-	Accent, Muted, Faint, Text, Strong lipgloss.TerminalColor
-	Red, Yellow, Green, Blue, Orange   lipgloss.TerminalColor
-	BarBg, SelBg, OnAccent             lipgloss.TerminalColor
+	Accent, Muted, Faint, Text, Strong color.Color
+	Red, Yellow, Green, Blue, Orange   color.Color
+	BarBg, SelBg, OnAccent             color.Color
 }
 
-func hex(s string) lipgloss.TerminalColor { return lipgloss.Color(s) }
+func hex(s string) color.Color { return lipgloss.Color(s) }
 
 var themes = []theme{
 	{
@@ -191,9 +193,34 @@ func (a *App) openThemePicker() {
 	a.picker.layout(a.width, a.height-2)
 }
 
-// formTheme adapta los formularios huh a la paleta activa.
-func formTheme() *huh.Theme {
-	t := huh.ThemeBase()
+// inputStyles pinta los campos de texto de bubbles (paleta, buscadores) con el
+// tema activo. Los de fábrica en v2 no siguen la paleta y su prompt (ANSI 7)
+// se lee mal sobre fondos claros.
+func inputStyles() textinput.Styles {
+	state := textinput.StyleState{
+		Text:        lipgloss.NewStyle().Foreground(colorStrong),
+		Placeholder: lipgloss.NewStyle().Foreground(colorMuted),
+		Suggestion:  lipgloss.NewStyle().Foreground(colorMuted),
+		Prompt:      lipgloss.NewStyle().Foreground(colorAccent),
+	}
+	s := textinput.DefaultStyles(darkBackground)
+	s.Focused, s.Blurred = state, state
+	s.Cursor.Color = colorAccent
+	return s
+}
+
+// newInput crea un campo de texto con el prompt y el texto de ayuda dados.
+func newInput(prompt, placeholder string) textinput.Model {
+	ti := textinput.New()
+	ti.Prompt, ti.Placeholder = prompt, placeholder
+	ti.SetStyles(inputStyles())
+	return ti
+}
+
+// formTheme adapta los formularios huh a la paleta activa. Los colores ya
+// resuelven claro/oscuro por sí solos (adaptiveColor), así que isDark no se usa.
+func formTheme(isDark bool) *huh.Styles {
+	t := huh.ThemeBase(isDark)
 	f := &t.Focused
 	f.Base = f.Base.BorderForeground(colorAccent)
 	f.Title = f.Title.Foreground(colorAccent).Bold(true)

@@ -1,29 +1,47 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/store"
 )
 
-func adaptive(light, dark string) lipgloss.TerminalColor {
-	return lipgloss.AdaptiveColor{Light: light, Dark: dark}
+// darkBackground indica si la terminal tiene fondo oscuro. Lo fija la app al
+// recibir tea.BackgroundColorMsg; mientras no responda se asume oscuro.
+var darkBackground = true
+
+// adaptiveColor es el equivalente del AdaptiveColor de lipgloss v1: elige el
+// color claro u oscuro al pintar, según darkBackground. lipgloss v2 quitó ese
+// tipo y su reemplazo (compat) consulta la terminal por su cuenta, lo que
+// chocaría con Bubble Tea, que es quien posee la entrada.
+type adaptiveColor struct{ light, dark color.Color }
+
+func (c adaptiveColor) RGBA() (r, g, b, a uint32) {
+	if darkBackground {
+		return c.dark.RGBA()
+	}
+	return c.light.RGBA()
+}
+
+func adaptive(light, dark string) color.Color {
+	return adaptiveColor{light: lipgloss.Color(light), dark: lipgloss.Color(dark)}
 }
 
 // Colores activos. applyTheme los reemplaza y reconstruye los estilos.
 var (
-	colorAccent, colorMuted, colorFaint, colorText, colorStrong lipgloss.TerminalColor
-	colorRed, colorYellow, colorGreen, colorBlue, colorOrange   lipgloss.TerminalColor
-	colorBarBg, colorSelBg, colorOnAcc                          lipgloss.TerminalColor
+	colorAccent, colorMuted, colorFaint, colorText, colorStrong color.Color
+	colorRed, colorYellow, colorGreen, colorBlue, colorOrange   color.Color
+	colorBarBg, colorSelBg, colorOnAcc                          color.Color
 
 	tabActiveStyle, tabInactiveStyle, appNameStyle, statusBarStyle, modalStyle lipgloss.Style
 	sectionStyle, titleStyle, headStyle, mutedStyle, faintStyle                lipgloss.Style
 	errorStyle, successStyle, warnStyle, keyStyle, selectedStyle               lipgloss.Style
 
-	taskStatusColors, projectStatusColors, paymentStatusColors map[string]lipgloss.TerminalColor
-	priorityColors                                             []lipgloss.TerminalColor
+	taskStatusColors, projectStatusColors, paymentStatusColors map[string]color.Color
+	priorityColors                                             []color.Color
 )
 
 func init() { applyTheme(themes[0]) }
@@ -48,24 +66,24 @@ func buildStyles() {
 	keyStyle = lipgloss.NewStyle().Bold(true).Foreground(colorStrong)
 	selectedStyle = lipgloss.NewStyle().Background(colorSelBg).Foreground(colorStrong)
 
-	taskStatusColors = map[string]lipgloss.TerminalColor{
+	taskStatusColors = map[string]color.Color{
 		store.TaskPendiente: colorMuted,
 		store.TaskEnCurso:   colorBlue,
 		store.TaskHecho:     colorGreen,
 	}
-	projectStatusColors = map[string]lipgloss.TerminalColor{
+	projectStatusColors = map[string]color.Color{
 		store.StatusProspecto:  colorMuted,
 		store.StatusActivo:     colorGreen,
 		store.StatusPausado:    colorYellow,
 		store.StatusCompletado: colorBlue,
 		store.StatusCancelado:  colorRed,
 	}
-	paymentStatusColors = map[string]lipgloss.TerminalColor{
+	paymentStatusColors = map[string]color.Color{
 		store.PaymentPendiente: colorYellow,
 		store.PaymentVencido:   colorRed,
 		store.PaymentPagado:    colorGreen,
 	}
-	priorityColors = []lipgloss.TerminalColor{colorMuted, colorAccent, colorOrange, colorRed}
+	priorityColors = []color.Color{colorMuted, colorAccent, colorOrange, colorRed}
 }
 
 // cursorMark es el marcador de la fila seleccionada, igual en todas las listas.

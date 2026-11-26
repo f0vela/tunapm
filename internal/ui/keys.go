@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/agenda"
 )
@@ -57,7 +57,7 @@ var taskKeys = taskKeyMap{
 	Top:           bind(k("home"), "inicio", "primera"),
 	Bottom:        bind(k("end"), "fin", "última"),
 	New:           bind(k("n"), "n", "nueva"),
-	Toggle:        bind(k(" "), "espacio", "hecha"),
+	Toggle:        bind(k("space"), "espacio", "hecha"),
 	Status:        bind(k("s"), "s", "estado"),
 	PrioUp:        bind(k("+", "="), "+", "subir prioridad"),
 	PrioDown:      bind(k("-"), "-", "bajar prioridad"),
@@ -250,7 +250,7 @@ var calendarKeys = calendarKeyMap{
 	Edit:      bind(k("e"), "e", "editar"),
 	Open:      bind(k("enter"), "enter", "abrir"),
 	Delete:    bind(k("d"), "d", "borrar"),
-	Toggle:    bind(k(" "), "espacio", "hecha"),
+	Toggle:    bind(k("space"), "espacio", "hecha"),
 	Pay:       bind(k("x"), "x", "pagada"),
 }
 

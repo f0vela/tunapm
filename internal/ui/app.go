@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"tunapm/internal/store"
 )
@@ -86,10 +86,12 @@ func NewApp(st store.Repo) *App {
 }
 
 func (a *App) Init() tea.Cmd {
+	// Averigua si el fondo de la terminal es claro u oscuro (ver adaptiveColor).
+	cmds := []tea.Cmd{tea.RequestBackgroundColor}
 	if a.syncer != nil {
-		return tea.Batch(waitSync(a.syncer), a.startSpinner())
+		cmds = append(cmds, waitSync(a.syncer), a.startSpinner())
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 // syncBusy: conectando o enviando cambios pendientes.
@@ -114,6 +116,9 @@ func (a *App) startSpinner() tea.Cmd {
 func (a *App) restyle() {
 	a.barHelp = newBarHelp()
 	a.spin.Style = lipgloss.NewStyle().Foreground(colorAccent).Background(colorBarBg)
+	// Los campos de texto que viven con la app guardan sus estilos: se actualizan con el tema.
+	a.tasks.searchInput.SetStyles(inputStyles())
+	a.notes.searchInput.SetStyles(inputStyles())
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -121,6 +126,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		a.layout()
+	case tea.BackgroundColorMsg:
+		darkBackground = msg.IsDark()
+		a.restyle()
 	case syncMsg:
 		// La sincronización cambió el espejo o el estado: se relee todo (es local, instantáneo).
 		a.reloadAll()
@@ -136,7 +144,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		a.spin, cmd = a.spin.Update(msg)
 		return a, cmd
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Una escritura local deja cambios por enviar: el spinner lo muestra hasta que lleguen.
 		cmd := tea.Batch(a.handleKey(msg), a.startSpinner())
 		if a.formInit != nil {
@@ -153,7 +161,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a *App) handleKey(msg tea.KeyMsg) tea.Cmd {
+func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.toast = ""
 
 	if a.form != nil {
@@ -248,7 +256,16 @@ func (a *App) reloadAll() {
 	a.calendar.reload()
 }
 
-func (a *App) View() string {
+// View es la pantalla completa; en v2 las opciones del terminal (pantalla
+// alterna, etc.) se declaran aquí en vez de en tea.NewProgram.
+func (a *App) View() tea.View {
+	v := tea.NewView(a.render())
+	v.AltScreen = true
+	v.WindowTitle = "tunapm"
+	return v
+}
+
+func (a *App) render() string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
 	}
@@ -369,7 +386,7 @@ func (a *App) statusBar() string {
 		// "? ayuda" siempre queda; el resto de los atajos se recorta si no cabe.
 		helpKey := a.barHelp.ShortHelpView([]key.Binding{globalKeys.Help})
 		room := inner - lipglossWidth(helpKey) - min(lipglossWidth(left), inner/3) - 4
-		a.barHelp.Width = max(room, 0)
+		a.barHelp.SetWidth(max(room, 0))
 		right = a.barHelp.ShortHelpView(a.activeShortHelp())
 		if right != "" {
 			right += bg.Render("  ")
@@ -456,7 +473,7 @@ func (a *App) openForm(form *huh.Form, save func() error) {
 	km.MultiSelect.Submit.SetHelp("enter", "guardar")
 	km.Confirm.Toggle.SetHelp("←/→", "cambiar")
 	km.Confirm.Submit.SetHelp("enter", "aceptar")
-	form.WithKeyMap(km).WithShowHelp(true).WithTheme(formTheme())
+	form.WithKeyMap(km).WithShowHelp(true).WithTheme(huh.ThemeFunc(formTheme))
 	if a.width > 20 {
 		form.WithWidth(min(a.width-8, 72))
 	}

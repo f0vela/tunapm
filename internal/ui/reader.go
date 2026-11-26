@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Reader es una ventana de lectura (nota, tarea, evento o la ayuda) sobre un
@@ -29,11 +29,11 @@ var readerKeys = struct{ Close, Top, Bottom key.Binding }{
 }
 
 func newReader(title string, lines []string) *Reader {
-	return &Reader{title: title, lines: lines, vp: viewport.New(0, 0)}
+	return &Reader{title: title, lines: lines, vp: viewport.New()}
 }
 
 // handleKey devuelve true si hay que cerrar la ventana.
-func (r *Reader) handleKey(msg tea.KeyMsg) bool {
+func (r *Reader) handleKey(msg tea.KeyPressMsg) bool {
 	switch {
 	case key.Matches(msg, readerKeys.Close):
 		return true
@@ -66,8 +66,9 @@ func (r *Reader) view(width, height int) string {
 			}
 			content = strings.Join(out, "\n")
 		}
-		offset := r.vp.YOffset
-		r.vp.Width, r.vp.Height = inner, page
+		offset := r.vp.YOffset()
+		r.vp.SetWidth(inner)
+		r.vp.SetHeight(page)
 		r.vp.SetContent(content)
 		r.vp.SetYOffset(offset)
 		r.lastW, r.lastH = inner, page
@@ -76,8 +77,8 @@ func (r *Reader) view(width, height int) string {
 	body := r.vp.View()
 	footer := renderHints("esc cerrar")
 	total := r.vp.TotalLineCount()
-	if total > r.vp.Height {
-		r.vp.Height = page
+	if total > r.vp.Height() {
+		r.vp.SetHeight(page)
 		position := fmt.Sprintf("%d%%", int(r.vp.ScrollPercent()*100+0.5))
 		switch {
 		case r.vp.AtTop():

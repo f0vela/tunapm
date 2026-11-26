@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"tunapm/internal/store"
 	"tunapm/internal/ui"
@@ -107,7 +107,7 @@ func main() {
 }
 
 func runTUI(repo store.Repo) error {
-	program := tea.NewProgram(ui.NewApp(repo), tea.WithAltScreen())
+	program := tea.NewProgram(ui.NewApp(repo))
 	_, err := program.Run()
 	return err
 }
